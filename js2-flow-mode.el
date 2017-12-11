@@ -9157,15 +9157,24 @@ invalid export statements."
         exports-list from-clause declaration default expr-node)
     (cond
      ((js2-match-contextual-kwd "type")
-      (let ((kind-tt (js2-current-token)))
+      (let ((kind-tt (js2-current-token))
+            match-LC)
         (when (js2-match-token js2-LC)
+          (setq match-LC t)
           (setq exports-list (js2-parse-export-bindings t kind-tt))
           (when exports-list
             (dolist (export exports-list)
-              (push export children)))
+              (push export children)
+              (let ((name-node (js2-export-binding-node-local-name export)))
+                (when name-node
+                  (js2-define-symbol
+                   js2-LET (js2-name-node-name name-node) name-node t)))))
           (when (js2-match-contextual-kwd "from")
             (js2-unget-token)
-            (setq from-clause (js2-parse-from-clause))))))
+            (setq from-clause (js2-parse-from-clause))))
+        (unless match-LC
+          (js2-get-token)
+          (js2-report-error "msg.syntax"))))
      ((js2-match-token js2-MUL)
       (when (js2-match-contextual-kwd "as")
         (js2-unget-token)
@@ -9184,7 +9193,11 @@ invalid export statements."
       (setq exports-list (js2-parse-export-bindings t))
       (when exports-list
         (dolist (export exports-list)
-          (push export children)))
+          (push export children)
+          (let ((name-node (js2-export-binding-node-local-name export)))
+            (when name-node
+              (js2-define-symbol
+               js2-LET (js2-name-node-name name-node) name-node t)))))
       (when (js2-match-contextual-kwd "from")
         (js2-unget-token)
         (setq from-clause (js2-parse-from-clause))))
