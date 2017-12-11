@@ -1506,6 +1506,9 @@ the correct number of ARGS must be provided."
 (js2-msg "msg.mod.export.decl.at.top.level"
          "SyntaxError: export declarations may only appear at top level")
 
+(js2-msg "msg.mod.export.default.only"
+         "Only one default export allowed per module.")
+
 (js2-msg "msg.mod.rc.after.export.spec.list"
          "SyntaxError: missing '}' after export specifier list")
 
@@ -8837,7 +8840,6 @@ imports or a namespace import that follows it.
          (children (list)))
     (cond
      ((js2-match-token js2-MUL)
-      ;; TODO1
       (let ((ns-import (js2-parse-namespace-import import-kind)))
         (when ns-import
           (let ((name-node (js2-namespace-import-node-name ns-import)))
@@ -8848,7 +8850,6 @@ imports or a namespace import that follows it.
      ((js2-match-token js2-LC)
       (let ((imports (js2-parse-export-bindings t import-kind)))
         (setf (js2-import-clause-node-named-imports clause) imports)
-        ;; TODO2
         (dolist (import imports)
           (push import children)
           (let ((name-node (js2-export-binding-node-local-name import)))
@@ -8856,7 +8857,6 @@ imports or a namespace import that follows it.
               (js2-define-symbol
                js2-LET (js2-name-node-name name-node) name-node t))))))
      ((= (js2-peek-token) js2-NAME)
-      ;; TODO3
       (let ((binding (js2-maybe-parse-export-binding t import-kind)))
         (print "TODO3")
         (print (js2-current-token-string))
@@ -9170,6 +9170,10 @@ invalid export statements."
         (js2-unget-token)
         (setq from-clause (js2-parse-from-clause))))
      ((js2-match-token js2-DEFAULT)
+      ;; FIXME a symbol
+      (if (js2-scope-get-symbol js2-current-scope "export-default")
+          (js2-report-error "msg.mod.export.default.only")
+        (js2-scope-put-symbol js2-current-scope "export-default" t))
       (setq default (cond ((js2-match-token js2-CLASS)
                            (if (eq (js2-peek-token) js2-NAME)
                                (js2-parse-class-stmt)
