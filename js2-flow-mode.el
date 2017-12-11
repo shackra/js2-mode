@@ -8858,8 +8858,6 @@ imports or a namespace import that follows it.
                js2-LET (js2-name-node-name name-node) name-node t))))))
      ((= (js2-peek-token) js2-NAME)
       (let ((binding (js2-maybe-parse-export-binding t import-kind)))
-        (print "TODO3")
-        (print (js2-current-token-string))
         (let ((node-name (js2-export-binding-node-local-name binding)))
           (js2-define-symbol js2-LET (js2-name-node-name node-name) node-name t))
         (setf (js2-import-clause-node-default-binding clause) binding)
@@ -8905,9 +8903,11 @@ The current token must be js2-MUL."
                             :len (- (js2-current-token-end)
                                     (js2-current-token-beg))
                             :name (js2-current-token-string)))))
+          (js2-set-face (js2-current-token-beg) (js2-current-token-end)
+                        'font-lock-variable-name-face 'record)
+          (js2-node-add-children node (js2-namespace-import-node-name node))
           (when import-kind
             (js2-flow-validate-primitive-type))
-          (js2-node-add-children node (js2-namespace-import-node-name node))
           node)))
      (t
       (js2-unget-token)
@@ -8979,7 +8979,6 @@ consumes no tokens."
   (let ((kind (js2-flow-parse-import-kind))
         only-kind)
     (when (and import-kind kind)
-      (print import-kind)
       (js2-report-error "msg.flow.only.import")
       (js2-report-error "msg.flow.only.import" nil
                         (js2-token-beg import-kind)
@@ -9155,12 +9154,22 @@ invalid export statements."
     (js2-report-error "msg.mod.export.decl.at.top.level"))
   (let ((beg (js2-current-token-beg))
         (children (list))
-        exports-list from-clause declaration default)
+        exports-list from-clause declaration default expr-node)
     (cond
      ((js2-match-token js2-MUL)
-      (setq from-clause (js2-parse-from-clause))
-      (when from-clause
-        (push from-clause children)))
+      (when (js2-match-contextual-kwd "as")
+        (js2-unget-token)
+        ;; FIXME ns-import js2-empty-expr-node
+        (let ((ns-export (js2-parse-namespace-import)))
+          (if (not (js2-match-contextual-kwd "from"))
+              (setq expr-node ns-export)
+            (when ns-export
+              (js2-unget-token)
+              (let ((name-node (js2-namespace-import-node-name ns-export)))
+                (js2-define-symbol
+                 js2-LET (js2-name-node-name name-node) name-node t)
+                (push ns-export children))))))
+      (setq from-clause (js2-parse-from-clause)))
      ((js2-match-token js2-LC)
       (setq exports-list (js2-parse-export-bindings))
       (when exports-list
@@ -9170,7 +9179,7 @@ invalid export statements."
         (js2-unget-token)
         (setq from-clause (js2-parse-from-clause))))
      ((js2-match-token js2-DEFAULT)
-      ;; FIXME a symbol
+      ;; FIXME make a symbol
       (if (js2-scope-get-symbol js2-current-scope "export-default")
           (js2-report-error "msg.mod.export.default.only")
         (js2-scope-put-symbol js2-current-scope "export-default" t))
@@ -9195,15 +9204,31 @@ invalid export statements."
      ((js2-match-token js2-CLASS)
       (setq declaration (js2-parse-class-stmt)))
      ((js2-match-token js2-NAME)
-      (setq declaration
-            (if (js2-match-async-function)
-                (js2-parse-async-function-stmt)
-              (js2-unget-token)
-              (js2-parse-expr))))
+      (if (js2-match-contextual-kwd "from")
+          (progn
+            (js2-unget-token)
+            (js2-unget-token)
+            (let ((binding (js2-maybe-parse-export-binding t nil)))
+              (let ((node-name (js2-export-binding-node-local-name binding)))
+                (js2-define-symbol js2-LET (js2-name-node-name node-name) node-name t))
+              ;; FIXME flow export type {}
+              ;; (when import-kind
+              ;;   (js2-flow-validate-primitive-type))
+              (push binding children))
+            (setq from-clause (js2-parse-from-clause)))
+        (setq declaration
+              (if (js2-match-async-function)
+                  (js2-parse-async-function-stmt)
+                ;; FIXME add test
+                (js2-unget-token)
+                (setq expr-node (js2-parse-expr))
+                nil))))
      ((js2-match-token js2-FUNCTION)
       (setq declaration (js2-parse-function-stmt)))
      (t
-      (setq declaration (js2-parse-expr))))
+      ;; export 42
+      ;; (setq declaration (js2-parse-expr))
+      (setq expr-node (js2-parse-expr))))
     (when from-clause
       (push from-clause children))
     (when declaration
@@ -9216,6 +9241,12 @@ invalid export statements."
       (when (not (or (js2-function-node-p default)
                      (js2-class-node-p default)))
         (js2-auto-insert-semicolon default)))
+    (when expr-node
+      ;; FIXME msg.syntax before msg.undeclared.variable
+      (js2-report-error "msg.syntax"
+                        nil
+                        (js2-node-pos expr-node)
+                        (js2-node-len expr-node)))
     (let ((node (make-js2-export-node
                  :pos beg
                  :len (- (js2-current-token-end) beg)
