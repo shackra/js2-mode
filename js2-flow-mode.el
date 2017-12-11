@@ -9156,6 +9156,16 @@ invalid export statements."
         (children (list))
         exports-list from-clause declaration default expr-node)
     (cond
+     ((js2-match-contextual-kwd "type")
+      (let ((kind-tt (js2-current-token)))
+        (when (js2-match-token js2-LC)
+          (setq exports-list (js2-parse-export-bindings t kind-tt))
+          (when exports-list
+            (dolist (export exports-list)
+              (push export children)))
+          (when (js2-match-contextual-kwd "from")
+            (js2-unget-token)
+            (setq from-clause (js2-parse-from-clause))))))
      ((js2-match-token js2-MUL)
       (when (js2-match-contextual-kwd "as")
         (js2-unget-token)
@@ -9171,7 +9181,7 @@ invalid export statements."
                 (push ns-export children))))))
       (setq from-clause (js2-parse-from-clause)))
      ((js2-match-token js2-LC)
-      (setq exports-list (js2-parse-export-bindings))
+      (setq exports-list (js2-parse-export-bindings t))
       (when exports-list
         (dolist (export exports-list)
           (push export children)))
