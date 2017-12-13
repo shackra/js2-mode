@@ -1084,6 +1084,11 @@ Not currently used."
   '((t :foreground "orange"))
   "Face used to highlight undeclared variable identifiers.")
 
+(defface js2-flow-primitive-type
+  '((t :foreground "MediumSlateBlue"))
+  "Face used to highlight named property in object literal."
+  :group 'js2-mode)
+
 (defcustom js2-init-hook nil
   ;; FIXME: We don't really need this anymore.
   "List of functions to be called after `js2-mode' or
@@ -3426,11 +3431,13 @@ declarations, the node begins at the position of the first child."
                (:constructor make-js2-var-init-node (&key (type js2-VAR)
                                                           (pos js2-ts-cursor)
                                                           len target
-                                                          initializer)))
+                                                          initializer
+                                                          type-annotation)))
   "AST node for a variable declaration.
 The type field will be js2-CONST for a const decl."
-  target        ; `js2-name-node', `js2-object-node', or `js2-array-node'
-  initializer)  ; initializer expression, a `js2-node'
+  target           ; `js2-name-node', `js2-object-node', or `js2-array-node'
+  initializer      ; initializer expression, a `js2-node'
+  type-annotation) ; flow type annotation
 
 (js2--struct-put 'js2-var-init-node 'js2-visitor 'js2-visit-var-init-node)
 (js2--struct-put 'js2-var-init-node 'js2-printer 'js2-print-var-init-node)
@@ -4622,6 +4629,105 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
 (defun js2-print-xml-comment (n i)
   (insert (js2-make-pad i)
           (js2-node-string n)))
+
+;;; Flow type node
+
+(cl-defstruct (js2-flow-type-node
+               (:include js2-node)
+               (:constructor nil)
+               (:constructor make-js2-flow-type-node (&key (pos js2-ts-cursor)
+                                                           len
+                                                           type-annotation)))
+  "AST node for flow type annotation."
+  type-annotation)
+
+(js2--struct-put 'js2-flow-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-flow-type-node 'js2-printer 'js2-print-flow-type-node)
+
+(defun js2-print-flow-type-node (n i)
+  (let ((type (js2-flow-type-node-type-annotation n)))
+    (insert ": ")
+    (js2-print-ast type 0)))
+
+
+(cl-defstruct (js2-flow-typeof-node
+               (:include js2-node)
+               (:constructor nil)
+               (:constructor make-js2-flow-typeof-node (&key (pos js2-ts-cursor)
+                                                             len
+                                                             argument)))
+  "AST node for flow typeof."
+  argument)
+
+(js2--struct-put 'js2-flow-typeof-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-flow-typeof-node 'js2-printer 'js2-print-flow-typeof-node)
+
+(defun js2-print-flow-typeof-node (n i)
+  (let ((argument (js2-flow-typeof-node-argument n)))
+    (insert "typeof ")
+    (js2-print-ast argument 0)))
+
+(cl-defstruct (js2-flow-generic-type-node
+               (:include js2-node)
+               (:constructor nil)
+               (:constructor make-js2-flow-generic-type-node (&key (pos js2-ts-cursor)
+                                                                   len
+                                                                   id
+                                                                   params)))
+  "AST node for flow generic type. var view: React.Component<*, Props, State>"
+  id
+  params)
+
+(js2--struct-put 'js2-flow-generic-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-flow-generic-type-node 'js2-printer 'js2-print-flow-generic-type-node)
+
+(defun js2-print-flow-generic-type-id-node (n i)
+  (let ((argument (js2-flow-typeof-node-argument n)))
+    (insert " ")
+    (js2-print-ast argument 0)))
+
+(cl-defstruct (js2-flow-generic-type-id-node
+               (:include js2-node)
+               (:constructor nil)
+               (:constructor make-js2-flow-generic-type-id-node (&key (pos js2-ts-cursor)
+                                                                      len
+                                                                      id
+                                                                      qualification)))
+  "AST node for flow generic type id. React.Component.Foo.Bar"
+  id
+  qualification)
+
+(js2--struct-put 'js2-flow-generic-type-id-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-flow-generic-type-id-node 'js2-printer 'js2-print-flow-generic-type-id-node)
+
+(defun js2-print-flow-generic-type-id-node (n i)
+  (let ((argument (js2-flow-typeof-node-argument n)))
+    (insert "typeof ")
+    (js2-print-ast argument 0)))
+
+
+(defmacro define-js2-flow-primitive-type-node (name)
+  (let* ((node-name (intern (format "js2-flow-%s-type-node" name)))
+         (constructor-func-name (intern (format "make-%s" node-name)))
+         (print-fun-name (intern (format "js2-print-flow-%s-type-node" name))))
+    `(progn
+       (cl-defstruct (,node-name
+                      (:include js2-node)
+                      (:constructor nil)
+                      (:constructor ,constructor-func-name (&key (pos js2-ts-cursor)
+                                                                 len)))
+         "AST node for flow primitive type.")
+       (js2--struct-put ',node-name 'js2-visitor 'js2-visit-none)
+       (js2--struct-put ',node-name 'js2-printer ',print-fun-name)
+       (defun ,print-fun-name (n i) (insert name)))))
+
+(define-js2-flow-primitive-type-node "any")
+(define-js2-flow-primitive-type-node "void")
+(define-js2-flow-primitive-type-node "boolean")
+(define-js2-flow-primitive-type-node "mixed")
+(define-js2-flow-primitive-type-node "empty")
+(define-js2-flow-primitive-type-node "number")
+(define-js2-flow-primitive-type-node "string")
 
 ;;; Node utilities
 
@@ -9827,6 +9933,171 @@ expression and return it wrapped in a `js2-expr-stmt-node'."
       (js2-unget-token)
       nil)))
 
+(defun js2-flow-parse-type-annotation ()
+  "Parse flow type annoation syntax."
+  (when (js2-match-token js2-COLON)
+    (js2-flow-parse-type)))
+
+(defun js2-flow-parse-type (&optional in-type)
+  "Parse flow type."
+  (let* ((beg (js2-current-token-beg))
+         (node (js2-flow-parse-union-type)))
+    (make-js2-flow-type-node :pos beg
+                             :len (- (js2-current-token-end) beg)
+                             :type-annotation node)))
+
+(defun js2-flow-parse-union-type ()
+  "Parse flow union type like:
+const v: a | b;
+"
+  (let (types)
+    (js2-match-token js2-BITOR)
+    (push (js2-flow-parse-intersection-type) types)
+    (while (js2-match-token js2-BITOR)
+      (push (js2-flow-parse-intersection-type) types))
+    (if (cdr types)
+        types
+      (car types))))
+
+(defun js2-flow-parse-intersection-type ()
+  "Parse flow union type like:
+const v: a & b;
+"
+  (let (types)
+    (js2-match-token js2-BITAND)
+    (push (js2-flow-parse-primary-type) types)
+    (while (js2-match-token js2-BITAND)
+      (push (js2-flow-parse-primary-type) types))
+    (if (cdr types)
+        types
+      (car types))))
+
+(defun js2-flow-parse-primary-type ()
+  "Parse flow primitive type."
+  (let* ((tt (js2-get-token))
+         (name (js2-current-token-string))
+         (pos (js2-current-token-beg))
+         (len (js2-current-token-len))
+         node)
+    (cond
+     ((= tt js2-NAME)
+      (cond
+       ((string= name "any")
+        (setq node (make-js2-flow-any-type-node :pos pos
+                                                :len len))
+        (js2-set-face pos (js2-current-token-end)
+                      'js2-flow-primitive-type 'record))
+       ((string= name "void")
+        (setq node (make-js2-flow-void-type-node :pos pos
+                                                 :len len))
+        (js2-set-face pos (js2-current-token-end)
+                      'js2-flow-primitive-type 'record))
+       ((string= name (or "boolean" "bool"))
+        (setq node (make-js2-flow-boolean-type-node :pos pos
+                                                    :len len))
+        (js2-set-face pos (js2-current-token-end)
+                      'js2-flow-primitive-type 'record))
+       ((string= name "mixed")
+        (setq node (make-js2-flow-mixed-type-node :pos pos
+                                                  :len len))
+        (js2-set-face pos (js2-current-token-end)
+                      'js2-flow-primitive-type 'record))
+       ((string= name "empty")
+        (setq node (make-js2-flow-empty-type-node :pos pos
+                                                  :len len))
+        (js2-set-face pos (js2-current-token-end)
+                      'js2-flow-primitive-type 'record))
+       ((string= name "number")
+        (setq node (make-js2-flow-number-type-node :pos pos
+                                                   :len len))
+        (js2-set-face pos (js2-current-token-end)
+                      'js2-flow-primitive-type 'record))
+       ((string= name "string")
+        (setq node (make-js2-flow-string-type-node :pos pos
+                                                   :len len))
+        (js2-set-face pos (js2-current-token-end)
+                      'js2-flow-primitive-type 'record))
+       (t
+        (js2-unget-token)
+        (setq node (js2-flow-parse-generic-type))
+        ;; parse generic type
+        )))
+     ((= tt js2-LB)
+      nil)
+     ((= tt js2-LB)
+      nil)
+     ((= tt js2-LP)
+      nil)
+     ((= tt js2-STRING)
+      nil)
+     ((or (= tt js2-TRUE) (= tt js2-FALSE))
+      nil)
+     ((= tt js2-NUMBER)
+      nil)
+     ((= tt js2-NULL)
+      nil)
+     ((= tt js2-THIS)
+      nil)
+     ((= tt js2-MUL)
+      nil)
+     ((= tt js2-TYPEOF)
+      (setq node
+            (let ((arg (js2-flow-parse-primary-type)))
+              (make-js2-flow-typeof-node :pos pos
+                                         :len (- (js2-current-token-end) pos)
+                                         :argument arg))))
+     (t
+      (print (js2-current-token))))
+    ;; (unless node
+    ;;   (js2-report-error "msg.syntax"))
+    node))
+
+(defun js2-flow-parse-generic-type ()
+  "Parse flow generic type. T<a, b>"
+  (let ((pos (js2-current-token-beg))
+        id params)
+    (setq id (js2-flow-parse-generic-type-id))
+    (when (js2-peek-token js2-LT)
+      (setq params (js2-flow-parse-type-param-instantiation)))
+    (make-js2-flow-generic-type-node :pos pos
+                                     :len (- (js2-current-token-end) pos)
+                                     :id id
+                                     :params params)))
+
+(defun js2-flow-parse-generic-type-id ()
+  "Parse flow generic identifiers. A.B.C"
+  (let ((pos (js2-current-token-beg))
+        node qualification)
+    (when (js2-match-token js2-NAME)
+      (setq node (js2-parse-name (js2-current-token)))
+      (while (js2-match-token js2-DOT)
+        (setq qualification (js2-flow-parse-generic-type-id))))
+    (make-js2-flow-generic-type-id-node :pos pos
+                                        :len (js2-current-token-len)
+                                        :id node
+                                        :qualification qualification)))
+
+(defun js2-flow-parse-type-param-instantiation ()
+  "Parse flow generic type params instantiation."
+  (when (js2-match-token js2-LT)
+    (let ((continue t)
+          params)
+      (while continue
+        (if (or (js2-match-token js2-GT)
+                (js2-match-token js2-EOF))
+            (setq continue nil)
+          (push (js2-flow-parse-type t) params)
+          (when (js2-match-token js2-COMMA)
+            (js2-unget-token)
+            (print (js2-current-token)))))
+      (print params)
+      (reverse params))))
+
+(defun js2-flow-parse-type-param ()
+  "Parse flow type params."
+
+  )
+
 (defun js2-parse-expr-stmt ()
   "Default parser in statement context, if no recognized statement found."
   (js2-wrap-with-expr-stmt (js2-current-token-beg)
@@ -9848,7 +10119,7 @@ in the first variable declaration.
 Returns the parsed `js2-var-decl-node' expression node."
   (let* ((result (make-js2-var-decl-node :decl-type decl-type
                                          :pos pos))
-         destructuring kid-pos tt init name end nbeg nend vi
+         destructuring kid-pos tt init name end nbeg nend vi type
          (continue t))
     ;; Example:
     ;; var foo = {a: 1, b: 2}, bar = [3, 4];
@@ -9874,6 +10145,11 @@ Returns the parsed `js2-var-decl-node' expression node."
                 end nend)
           (js2-define-symbol decl-type (js2-current-token-string) name js2-in-for-init)
           (js2-check-strict-identifier name)))
+      ;; TODO parse FlowType TypeAnnoation
+      ;; TODOF
+      (when (js2-match-token js2-COLON)
+        (js2-unget-token)
+        (setq type (js2-flow-parse-type-annotation)))
       (when (js2-match-token js2-ASSIGN)
         (setq init (js2-parse-assign-expr)
               end (js2-node-end init))
@@ -9885,7 +10161,10 @@ Returns the parsed `js2-var-decl-node' expression node."
                       'record))
       (setq vi (make-js2-var-init-node :pos kid-pos
                                        :len (- end kid-pos)
-                                       :type decl-type))
+                                       :type decl-type
+                                       ;; :type-annotation type
+                                       ))
+      ;; TODO check init value for `const a`;
       (if destructuring
           (progn
             (if (and (null init) (not js2-in-for-init))
