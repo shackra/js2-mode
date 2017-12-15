@@ -8453,13 +8453,15 @@ for strict mode errors caused by PARAMS."
 (defun js2-parse-function-params (function-type fn-node pos)
   "Parse the parameters of a function of FUNCTION-TYPE
 represented by FN-NODE at POS."
+  ;; TODOF
   (if (js2-match-token js2-RP)
       (setf (js2-function-node-rp fn-node) (- (js2-current-token-beg) pos))
     (let ((paren-free-arrow (and (eq function-type 'FUNCTION_ARROW)
                                  (eq (js2-current-token-type) js2-NAME)))
           params param
           param-name-nodes new-param-name-nodes
-          rest-param-at)
+          rest-param-at
+          type)
       (when paren-free-arrow
         (js2-unget-token))
       (cl-loop for tt = (js2-peek-token)
@@ -8487,7 +8489,12 @@ represented by FN-NODE at POS."
                  (setq param (js2-create-name-node))
                  (js2-define-symbol js2-LP (js2-current-token-string) param)
                  (js2-check-strict-function-params param-name-nodes (list param))
-                 (setq param-name-nodes (append param-name-nodes (list param)))))
+                 (setq param-name-nodes (append param-name-nodes (list param)))
+                 ;; parse function type params
+                 (when (js2-match-token js2-COLON)
+                   (js2-unget-token)
+                   (setq type (js2-flow-parse-type-annotation)))
+                 ))
                ;; default parameter value
                (when (and (not rest-param-at)
                           (>= js2-language-version 200)
@@ -8540,10 +8547,16 @@ Last token scanned is the close-curly for the function body."
 
 (defun js2-parse-function-stmt (&optional async-p)
   (let ((pos (js2-current-token-beg))
-        (star-p (js2-match-token js2-MUL)))
+        (star-p (js2-match-token js2-MUL))
+        type-params)
     (js2-must-match-name "msg.unnamed.function.stmt")
     (let ((name (js2-create-name-node t))
           pn member-expr)
+      ;; TODOFLOW add typeParams
+      (when (= (js2-peek-token) js2-LT)
+        (setq js2-flow-in-type-annotation t)
+        (setq type-params (js2-flow-parse-type-param-instantiation t))
+        (setq js2-flow-in-type-annotation nil))
       (cond
        ((js2-match-token js2-LP)
         (js2-parse-function 'FUNCTION_STATEMENT pos star-p async-p name))
@@ -8607,6 +8620,10 @@ Last token scanned is the close-curly for the function body."
       (js2-parse-function-params function-type fn-node pos)
       (when (eq function-type 'FUNCTION_ARROW)
         (js2-must-match js2-ARROW "msg.bad.arrow.args"))
+      ;; parse function return type
+      (when (js2-match-token js2-COLON)
+        (js2-unget-token)
+        (setq type (js2-flow-parse-type-annotation)))
       (if (and (>= js2-language-version 180)
                (/= (js2-peek-token) js2-LC))
           (js2-parse-function-closure-body fn-node)
@@ -9947,41 +9964,41 @@ expression and return it wrapped in a `js2-expr-stmt-node'."
     (js2-flow-parse-type)
     (setq js2-flow-in-type-annotation nil)))
 
-(defun js2-flow-parse-type (&optional in-type)
+(defun js2-flow-parse-type (&optional decl-p)
   "Parse flow type."
   (let* ((beg (js2-current-token-beg))
-         (node (js2-flow-parse-union-type)))
+         (node (js2-flow-parse-union-type decl-p)))
     (make-js2-flow-type-node :pos beg
                              :len (- (js2-current-token-end) beg)
                              :type-annotation node)))
 
-(defun js2-flow-parse-union-type (&optional in-type)
+(defun js2-flow-parse-union-type (&optional decl-p)
   "Parse flow union type like:
 const v: a | b;
 "
   (let (types)
     (js2-match-token js2-BITOR)
-    (push (js2-flow-parse-intersection-type in-type) types)
+    (push (js2-flow-parse-intersection-type decl-p) types)
     (while (js2-match-token js2-BITOR)
-      (push (js2-flow-parse-intersection-type in-type) types))
+      (push (js2-flow-parse-intersection-type decl-p) types))
     (if (cdr types)
         types
       (car types))))
 
-(defun js2-flow-parse-intersection-type (&optional in-type)
+(defun js2-flow-parse-intersection-type (&optional decl-p)
   "Parse flow union type like:
 const v: a & b;
 "
   (let (types)
     (js2-match-token js2-BITAND)
-    (push (js2-flow-parse-primary-type in-type) types)
+    (push (js2-flow-parse-primary-type decl-p) types)
     (while (js2-match-token js2-BITAND)
-      (push (js2-flow-parse-primary-type in-type) types))
+      (push (js2-flow-parse-primary-type decl-p) types))
     (if (cdr types)
         types
       (car types))))
 
-(defun js2-flow-parse-primary-type (&optional in-type)
+(defun js2-flow-parse-primary-type (&optional decl-p)
   "Parse flow primitive type."
   (let* ((tt (js2-get-token))
          (name (js2-current-token-string))
@@ -10028,7 +10045,7 @@ const v: a & b;
                       'js2-flow-primitive-type 'record))
        (t
         (js2-unget-token)
-        (setq node (js2-flow-parse-generic-type in-type))
+        (setq node (js2-flow-parse-generic-type decl-p))
         ;; parse generic type
         )))
      ((= tt js2-LB)
@@ -10062,32 +10079,35 @@ const v: a & b;
     ;;   (js2-report-error "msg.syntax"))
     node))
 
-(defun js2-flow-parse-generic-type (&optional in-type)
+(defun js2-flow-parse-generic-type (&optional decl-p)
   "Parse flow generic type. T<a, b>"
   (let ((pos (js2-current-token-beg))
         id params)
-    (setq id (js2-flow-parse-generic-type-id))
+    (setq id (js2-flow-parse-generic-type-id decl-p))
     (when (= (js2-peek-token) js2-LT)
-      (setq params (js2-flow-parse-type-param-instantiation)))
+      (setq params (js2-flow-parse-type-param-instantiation decl-p)))
     (make-js2-flow-generic-type-node :pos pos
                                      :len (- (js2-current-token-end) pos)
                                      :id id
                                      :params params)))
 
-(defun js2-flow-parse-generic-type-id (&optional in-type)
+(defun js2-flow-parse-generic-type-id (&optional decl-p)
   "Parse flow generic identifiers. A.B.C"
   (let ((pos (js2-current-token-beg))
         node qualification)
     (when (js2-match-token js2-NAME)
       (setq node (js2-parse-name (js2-current-token)))
+      (when decl-p
+        (js2-define-symbol
+         js2-LET (js2-name-node-name node) node t))
       (while (js2-match-token js2-DOT)
-        (setq qualification (js2-flow-parse-generic-type-id))))
+        (setq qualification (js2-flow-parse-generic-type-id decl-p))))
     (make-js2-flow-generic-type-id-node :pos pos
                                         :len (js2-current-token-len)
                                         :id node
                                         :qualification qualification)))
 
-(defun js2-flow-parse-type-param-instantiation (&optional in-type)
+(defun js2-flow-parse-type-param-instantiation (&optional decl-p)
   "Parse flow generic type params instantiation."
   (when (js2-match-token js2-LT)
     (if (js2-match-token js2-GT)
@@ -10095,12 +10115,10 @@ const v: a & b;
       (let ((continue t)
             params)
         (while continue
-          (push (js2-flow-parse-type t) params)
+          (push (js2-flow-parse-type decl-p) params)
           (unless (js2-match-token js2-COMMA)
             (setq continue nil)
-            (if (js2-match-token js2-GT)
-                (when in-type
-                  (js2-unget-token))
+            (unless (js2-match-token js2-GT)
               (js2-report-error "msg.syntax"))))
         (reverse params)))))
 
