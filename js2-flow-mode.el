@@ -2035,7 +2035,7 @@ or `import typeof` statements")
 
 ;;; Tokens Buffer
 
-(defconst js2-ti-max-lookahead 4)
+(defconst js2-ti-max-lookahead 2)
 (defconst js2-ti-ntokens (1+ js2-ti-max-lookahead))
 
 (defun js2-new-token (offset)
@@ -6328,17 +6328,19 @@ its relevant fields and puts it into `js2-ti-tokens'."
                                  js2-LE
                                (throw 'return js2-LT))))
                           (?>
-                           (if (js2-match-char ?>)
-                               (if (js2-match-char ?>)
+                           (if js2-flow-in-type-annotation
+                               (throw 'return js2-GT)
+                             (if (js2-match-char ?>)
+                                 (if (js2-match-char ?>)
+                                     (if (js2-match-char ?=)
+                                         js2-ASSIGN_URSH
+                                       js2-URSH)
                                    (if (js2-match-char ?=)
-                                       js2-ASSIGN_URSH
-                                     js2-URSH)
-                                 (if (js2-match-char ?=)
-                                     js2-ASSIGN_RSH
-                                   js2-RSH))
-                             (if (js2-match-char ?=)
-                                 js2-GE
-                               (throw 'return js2-GT))))
+                                       js2-ASSIGN_RSH
+                                     js2-RSH))
+                               (if (js2-match-char ?=)
+                                   js2-GE
+                                 (throw 'return js2-GT)))))
                           (?*
                            (if (js2-match-char ?=)
                                js2-ASSIGN_MUL
@@ -8040,17 +8042,17 @@ from `js2-ti-tokens'.  Otherwise, call `js2-get-token'."
 
 (defalias 'js2-next-token 'js2-get-token)
 
-(defun js2-match-token (match &optional dont-unget)
+(defun js2-match-token (match &optional dont-unget modifier)
   "Get next token and return t if it matches MATCH, a bytecode.
 Returns nil and consumes nothing if MATCH is not the next token."
-  (if (/= (js2-get-token) match)
+  (if (/= (js2-get-token modifier) match)
       (ignore (unless dont-unget (js2-unget-token)))
     t))
 
-(defun js2-match-contextual-kwd (name)
+(defun js2-match-contextual-kwd (name &optional modifier)
   "Consume and return t if next token is `js2-NAME', and its
 string is NAME.  Returns nil and keeps current token otherwise."
-  (if (js2-contextual-kwd-p (progn (js2-get-token)
+  (if (js2-contextual-kwd-p (progn (js2-get-token modifier)
                                    (js2-current-token))
                             name)
       (progn (js2-record-face 'font-lock-keyword-face) t)
@@ -9933,10 +9935,17 @@ expression and return it wrapped in a `js2-expr-stmt-node'."
       (js2-unget-token)
       nil)))
 
+(js2-deflocal js2-flow-in-type-annotation nil)
+
 (defun js2-flow-parse-type-annotation ()
   "Parse flow type annoation syntax."
+  ;; TODO parse type annoation not safe.
+  ;; Need override the scanner.
+  ;; TODO parse var v: A<a, B<b, C<c>>> >>= 42;
+  (setq js2-flow-in-type-annotation t)
   (when (js2-match-token js2-COLON)
-    (js2-flow-parse-type)))
+    (js2-flow-parse-type)
+    (setq js2-flow-in-type-annotation nil)))
 
 (defun js2-flow-parse-type (&optional in-type)
   "Parse flow type."
@@ -9946,33 +9955,33 @@ expression and return it wrapped in a `js2-expr-stmt-node'."
                              :len (- (js2-current-token-end) beg)
                              :type-annotation node)))
 
-(defun js2-flow-parse-union-type ()
+(defun js2-flow-parse-union-type (&optional in-type)
   "Parse flow union type like:
 const v: a | b;
 "
   (let (types)
     (js2-match-token js2-BITOR)
-    (push (js2-flow-parse-intersection-type) types)
+    (push (js2-flow-parse-intersection-type in-type) types)
     (while (js2-match-token js2-BITOR)
-      (push (js2-flow-parse-intersection-type) types))
+      (push (js2-flow-parse-intersection-type in-type) types))
     (if (cdr types)
         types
       (car types))))
 
-(defun js2-flow-parse-intersection-type ()
+(defun js2-flow-parse-intersection-type (&optional in-type)
   "Parse flow union type like:
 const v: a & b;
 "
   (let (types)
     (js2-match-token js2-BITAND)
-    (push (js2-flow-parse-primary-type) types)
+    (push (js2-flow-parse-primary-type in-type) types)
     (while (js2-match-token js2-BITAND)
-      (push (js2-flow-parse-primary-type) types))
+      (push (js2-flow-parse-primary-type in-type) types))
     (if (cdr types)
         types
       (car types))))
 
-(defun js2-flow-parse-primary-type ()
+(defun js2-flow-parse-primary-type (&optional in-type)
   "Parse flow primitive type."
   (let* ((tt (js2-get-token))
          (name (js2-current-token-string))
@@ -10019,7 +10028,7 @@ const v: a & b;
                       'js2-flow-primitive-type 'record))
        (t
         (js2-unget-token)
-        (setq node (js2-flow-parse-generic-type))
+        (setq node (js2-flow-parse-generic-type in-type))
         ;; parse generic type
         )))
      ((= tt js2-LB)
@@ -10047,24 +10056,25 @@ const v: a & b;
                                          :len (- (js2-current-token-end) pos)
                                          :argument arg))))
      (t
-      (print (js2-current-token))))
+      ;; (print (js2-current-token))
+      ))
     ;; (unless node
     ;;   (js2-report-error "msg.syntax"))
     node))
 
-(defun js2-flow-parse-generic-type ()
+(defun js2-flow-parse-generic-type (&optional in-type)
   "Parse flow generic type. T<a, b>"
   (let ((pos (js2-current-token-beg))
         id params)
     (setq id (js2-flow-parse-generic-type-id))
-    (when (js2-peek-token js2-LT)
+    (when (= (js2-peek-token) js2-LT)
       (setq params (js2-flow-parse-type-param-instantiation)))
     (make-js2-flow-generic-type-node :pos pos
                                      :len (- (js2-current-token-end) pos)
                                      :id id
                                      :params params)))
 
-(defun js2-flow-parse-generic-type-id ()
+(defun js2-flow-parse-generic-type-id (&optional in-type)
   "Parse flow generic identifiers. A.B.C"
   (let ((pos (js2-current-token-beg))
         node qualification)
@@ -10077,21 +10087,22 @@ const v: a & b;
                                         :id node
                                         :qualification qualification)))
 
-(defun js2-flow-parse-type-param-instantiation ()
+(defun js2-flow-parse-type-param-instantiation (&optional in-type)
   "Parse flow generic type params instantiation."
   (when (js2-match-token js2-LT)
-    (let ((continue t)
-          params)
-      (while continue
-        (if (or (js2-match-token js2-GT)
-                (js2-match-token js2-EOF))
-            (setq continue nil)
+    (if (js2-match-token js2-GT)
+        (js2-report-error "msg.syntax")
+      (let ((continue t)
+            params)
+        (while continue
           (push (js2-flow-parse-type t) params)
-          (when (js2-match-token js2-COMMA)
-            (js2-unget-token)
-            (print (js2-current-token)))))
-      (print params)
-      (reverse params))))
+          (unless (js2-match-token js2-COMMA)
+            (setq continue nil)
+            (if (js2-match-token js2-GT)
+                (when in-type
+                  (js2-unget-token))
+              (js2-report-error "msg.syntax"))))
+        (reverse params)))))
 
 (defun js2-flow-parse-type-param ()
   "Parse flow type params."
@@ -10145,8 +10156,6 @@ Returns the parsed `js2-var-decl-node' expression node."
                 end nend)
           (js2-define-symbol decl-type (js2-current-token-string) name js2-in-for-init)
           (js2-check-strict-identifier name)))
-      ;; TODO parse FlowType TypeAnnoation
-      ;; TODOF
       (when (js2-match-token js2-COLON)
         (js2-unget-token)
         (setq type (js2-flow-parse-type-annotation)))
@@ -10162,7 +10171,7 @@ Returns the parsed `js2-var-decl-node' expression node."
       (setq vi (make-js2-var-init-node :pos kid-pos
                                        :len (- end kid-pos)
                                        :type decl-type
-                                       ;; :type-annotation type
+                                       :type-annotation type
                                        ))
       ;; TODO check init value for `const a`;
       (if destructuring
