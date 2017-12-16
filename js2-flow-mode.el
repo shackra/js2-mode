@@ -641,7 +641,16 @@ which doesn't seem particularly useful, but Rhino permits it."
 (defvar js2-HOOK 170)          ; conditional (?:)
 (defvar js2-EXPON 171)
 
-(defconst js2-num-tokens (1+ js2-EXPON))
+;; Flow
+(defvar js2-TYPEALIAS 172)              ; type alias decl
+(defvar js2-IMPLEMENTS 173)             ; implements node
+(defvar js2-INTERFACE 174)              ; interface decl
+;; (defvar js2-CHECKS 175)
+
+;; TypeScript
+(defvar js2-ENUM 175)
+
+(defconst js2-num-tokens (1+ js2-ENUM))
 
 (defconst js2-debug-print-trees nil)
 
@@ -2031,6 +2040,9 @@ the correct number of ARGS must be provided."
          "The `type` and `typeof` keywords on named imports can only be \
 used on regular `import` statements. It cannot be used with `import type` \
 or `import typeof` statements")
+
+(js2-msg "msg.missing.implements"
+         "name is required after implements")
 
 
 ;;; Tokens Buffer
@@ -5876,7 +5888,9 @@ into temp buffers."
     this throw true try typeof
     var void
     while with
-    yield))
+    yield
+    ;; flow keywords
+    interface implements))
 
 ;; Token names aren't exactly the same as the keywords, unfortunately.
 ;; E.g. delete is js2-DELPROP.
@@ -5897,7 +5911,8 @@ into temp buffers."
                js2-THIS js2-THROW js2-TRUE js2-TRY js2-TYPEOF
                js2-VAR
                js2-WHILE js2-WITH
-               js2-YIELD)))
+               js2-YIELD
+               js2-IMPLEMENTS js2-INTERFACE)))
     (dolist (i tokens)
       (aset table i 'font-lock-keyword-face))
     (aset table js2-STRING 'font-lock-string-face)
@@ -5918,7 +5933,10 @@ The values are default faces to use for highlighting the keywords.")
 
 ;; FIXME: Support strict mode-only future reserved words, after we know
 ;; which parts scopes are in strict mode, and which are not.
-(defconst js2-reserved-words '(class enum export extends import static super)
+(defconst js2-reserved-words '(class enum export extends import super
+                                     ;; static
+                                     ;; flow keywords
+                                     interface implements)
   "Future reserved keywords in ECMAScript 5.1.")
 
 (defconst js2-keyword-names
@@ -8552,7 +8570,7 @@ Last token scanned is the close-curly for the function body."
     (js2-must-match-name "msg.unnamed.function.stmt")
     (let ((name (js2-create-name-node t))
           pn member-expr)
-      ;; TODOFLOW add typeParams
+      ;; parse flow generic types
       (when (= (js2-peek-token) js2-LT)
         (setq js2-flow-in-type-annotation t)
         (setq type-params (js2-flow-parse-type-param-instantiation t))
@@ -8623,7 +8641,16 @@ Last token scanned is the close-curly for the function body."
       ;; parse function return type
       (when (js2-match-token js2-COLON)
         (js2-unget-token)
-        (setq type (js2-flow-parse-type-annotation)))
+        (setq type (js2-flow-parse-type-annotation))
+        ;; parse predicate annotation %checks
+        ;; need js2-ti-max-lookahead >= 2
+        (when (and (js2-match-token js2-MOD))
+          (when (js2-match-token js2-NAME)
+            (if (not (string= (js2-current-token-string) "checks"))
+                (dotimes (_ 2)
+                  (js2-unget-token))
+              (js2-set-face (1- (js2-current-token-beg)) (js2-current-token-end)
+                            'js2-flow-primitive-type 'record)))))
       (if (and (>= js2-language-version 180)
                (/= (js2-peek-token) js2-LC))
           (js2-parse-function-closure-body fn-node)
@@ -10072,6 +10099,9 @@ const v: a & b;
               (make-js2-flow-typeof-node :pos pos
                                          :len (- (js2-current-token-end) pos)
                                          :argument arg))))
+     ((= tt js2-MOD)
+      ;; for %checks
+      (js2-unget-token))
      (t
       ;; (print (js2-current-token))
       ))
@@ -11353,6 +11383,11 @@ If ONLY-OF-P is non-nil, only the 'for (foo of bar)' form is allowed."
         (name (js2-create-name-node t)))
     (js2-set-face (js2-node-pos name) (js2-node-end name)
                   'font-lock-function-name-face 'record)
+    ;; parse flow generic types
+    (when (= (js2-peek-token) js2-LT)
+      (setq js2-flow-in-type-annotation t)
+      (setq type-params (js2-flow-parse-type-param-instantiation t))
+      (setq js2-flow-in-type-annotation nil))
     (let ((node (js2-parse-class pos 'CLASS_STATEMENT name)))
       (js2-record-imenu-functions node name)
       (js2-define-symbol js2-FUNCTION
@@ -11369,7 +11404,7 @@ If ONLY-OF-P is non-nil, only the 'for (foo of bar)' form is allowed."
 
 (defun js2-parse-class (pos form name)
   ;; class X [extends ...] {
-  (let (pn elems extends)
+  (let (pn elems extends implements)
     (if (js2-match-token js2-EXTENDS)
         (if (= (js2-peek-token) js2-LC)
             (js2-report-error "msg.missing.extends")
@@ -11377,6 +11412,22 @@ If ONLY-OF-P is non-nil, only the 'for (foo of bar)' form is allowed."
           (setq extends (js2-parse-assign-expr))
           (if (not extends)
               (js2-report-error "msg.bad.extends"))))
+    ;; parse implements node
+    (if (js2-match-token js2-IMPLEMENTS)
+        (if (= (js2-peek-token) js2-LC)
+            (js2-report-error "msg.missing.implements")
+          ;; implements A, B {
+          (let ((continue t))
+            (while continue
+              ;; FIXME implements not want a expr
+              (push (js2-parse-assign-expr) implements)
+              (unless (js2-match-token js2-COMMA)
+                (setq continue nil)
+                (unless (js2-peek-token js2-LC)
+                  (js2-report-error "msg.bad.implements")))))
+          ;; TODO reverse implements
+          (if (not implements)
+              (js2-report-error "msg.bad.implements"))))
     (js2-must-match js2-LC "msg.no.brace.class")
     (setq elems (js2-parse-object-literal-elems t)
           pn (make-js2-class-node :pos pos
@@ -11434,6 +11485,7 @@ expression)."
                  (string= "static" (js2-current-token-string)))
         (js2-record-face 'font-lock-keyword-face)
         (setq static t
+              ;; previous-token (js2-current-token)
               tt (js2-get-prop-name-token)))
       ;; Handle generator * before the property name for in-line functions
       (when (and (>= js2-language-version 200)
@@ -11473,7 +11525,7 @@ expression)."
                                            pos elems after-comma)))
        ;; Skip semicolons in a class body
        ((and class-p
-             (= tt js2-SEMI))
+             (or (= tt js2-SEMI)))
         nil)
        (t
         (js2-report-error "msg.bad.prop")
@@ -11527,7 +11579,8 @@ When `js2-is-in-destructuring' is t, forms like {a, b, c} will be permitted."
                          (if (= (js2-token-type previous-token) js2-MUL)
                              "*"
                            (js2-token-string previous-token))))
-        pos)
+        pos
+        type)
     (when (member prop '("get" "set" "async"))
       (setq pos (js2-token-beg previous-token))
       (js2-set-face (js2-token-beg previous-token)
@@ -11548,6 +11601,13 @@ When `js2-is-in-destructuring' is t, forms like {a, b, c} will be permitted."
                    js2-is-in-destructuring))
           (js2-report-error "msg.init.no.destruct"))
       (js2-parse-initialized-binding key))
+     ;; parse prop types, like p: number
+     ((and class-p
+           (= (js2-peek-token) js2-COLON))
+      (setq type (js2-flow-parse-type-annotation))
+      ;; also with initializer, like p: number = 42
+      (when (= (js2-peek-token) js2-ASSIGN)
+        (js2-parse-initialized-binding key)))
      ;; regular prop
      (t
       (let ((beg (js2-current-token-beg))
