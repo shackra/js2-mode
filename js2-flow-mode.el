@@ -10103,8 +10103,7 @@ const v: a & b;
             end-delim props)
         (when (js2-match-token js2-BITOR)
           (setq end-delim js2-BITOR))
-        (js2-parse-object-literal-elems nil t end-delim)
-        )
+        (js2-parse-object-literal-elems nil t end-delim))
 
       ;; TODO set node
       nil)
@@ -11583,17 +11582,12 @@ expression)."
        ((member tt (list js2-NAME js2-STRING js2-NUMBER js2-LB))
         (setq after-comma nil
               elem (js2-parse-named-prop tt previous-token class-p type-p))
-        (print "CURRENT")
-        (print (js2-current-token))
-        (print (js2-peek-token))
         (if (and (null elem)
                  (not js2-recover-from-parse-errors))
             (setq continue nil)))
        ;; Break out of loop, and handle trailing commas.
        ((or (if (not end-delim)
                 (= tt js2-RC)
-              (print "CHEKCIN")
-              (print 42)
               (and (= tt end-delim)
                    (= (js2-peek-token) js2-RC)))
             (= tt js2-EOF))
@@ -11610,7 +11604,6 @@ expression)."
         (js2-report-error "msg.bad.prop")
         (unless js2-recover-from-parse-errors
           (setq continue nil))))         ; end switch
-      (print (js2-current-token))
       ;; Handle static for classes' codegen.
       (if static
           (if elem (js2-node-set-prop elem 'STATIC t)
@@ -11647,12 +11640,8 @@ expression)."
                             (js2-node-len (js2-infix-node-left elem))))
         ;; Append any parsed element.
         (push elem elems)))       ; end loop
-    (print "LAST")
-    (print (js2-current-token))
-    (print end-delim)
     (when end-delim
       (js2-must-match end-delim "msg.no.brace.prop"))
-    (print (js2-current-token))
     (js2-must-match js2-RC "msg.no.brace.prop")
     (nreverse elems)))
 
@@ -11698,7 +11687,7 @@ When `js2-is-in-destructuring' is t, forms like {a, b, c} will be permitted."
            (= (js2-peek-token) js2-COLON))
       (setq type (js2-flow-parse-type-annotation))
       ;; also with initializer, like p: number = 42
-      (when (and (not class-p) type-p
+      (when (and (not type-p) class-p
                  (= (js2-peek-token) js2-ASSIGN))
         (js2-parse-initialized-binding key)))
      ;; regular prop
