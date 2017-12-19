@@ -3369,11 +3369,13 @@ declarations, the node begins at the position of the first child."
                (:constructor make-js2-var-init-node (&key (type js2-VAR)
                                                           (pos js2-ts-cursor)
                                                           len target
+                                                          type-annotation
                                                           initializer)))
   "AST node for a variable declaration.
 The type field will be js2-CONST for a const decl."
-  target        ; `js2-name-node', `js2-object-node', or `js2-array-node'
-  initializer)  ; initializer expression, a `js2-node'
+  target           ; `js2-name-node', `js2-object-node', or `js2-array-node'
+  type-annotation  ; type annotation
+  initializer)     ; initializer expression, a `js2-node'
 
 (js2--struct-put 'js2-var-init-node 'js2-visitor 'js2-visit-var-init-node)
 (js2--struct-put 'js2-var-init-node 'js2-printer 'js2-print-var-init-node)
@@ -3385,9 +3387,11 @@ The type field will be js2-CONST for a const decl."
 (defun js2-print-var-init-node (n i)
   (let ((pad (js2-make-pad i))
         (name (js2-var-init-node-target n))
-        (init (js2-var-init-node-initializer n)))
+        (init (js2-var-init-node-initializer n))
+        (ta (js2-var-init-node-type-annotation n)))
     (insert pad)
     (js2-print-ast name 0)
+    (js2-print-ast ta 0)
     (when init
       (insert " = ")
       (js2-print-ast init 0))))
@@ -4525,6 +4529,24 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
 (defun js2-print-xml-comment (n i)
   (insert (js2-make-pad i)
           (js2-node-string n)))
+
+;;; Type Annotation Node
+
+(cl-defstruct (js2-type-annotation-node
+               (:include js2-node)
+               (:constructor make-js2-type-annotation-node (&key (type js2-COLON)
+                                                                 (pos js2-ts-cursor)
+                                                                 len type-annotation)))
+  "AST node for type annotation node."
+  type-annotation)  ; type node type annotation.
+
+(js2--struct-put 'js2-type-annotation-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-type-annotation-node 'js2-printer 'js2-print-type-annotation-node)
+
+(defun js2-print-type-annotation-node (n i)
+  ;; TODO replace type node.
+  (insert ": ")
+  (insert "number"))
 
 ;;; Node utilities
 
@@ -9600,6 +9622,8 @@ Returns the parsed `js2-var-decl-node' expression node."
   (let* ((result (make-js2-var-decl-node :decl-type decl-type
                                          :pos pos))
          destructuring kid-pos tt init name end nbeg nend vi
+         ;; Add type annotation node
+         type-annotation
          (continue t))
     ;; Example:
     ;; var foo = {a: 1, b: 2}, bar = [3, 4];
@@ -9625,6 +9649,9 @@ Returns the parsed `js2-var-decl-node' expression node."
                 end nend)
           (js2-define-symbol decl-type (js2-current-token-string) name js2-in-for-init)
           (js2-check-strict-identifier name)))
+      ;; Parse type annotation, e.g. var a: number
+      (when (js2-peek-token js2-COLON)
+        (setq type-annotation (js2-parse-type-annotation)))
       (when (js2-match-token js2-ASSIGN)
         (setq init (js2-parse-assign-expr)
               end (js2-node-end init))
@@ -9646,8 +9673,10 @@ Returns the parsed `js2-var-decl-node' expression node."
                                          'font-lock-variable-name-face)
             (setf (js2-var-init-node-target vi) destructuring))
         (setf (js2-var-init-node-target vi) name))
+      (when type-annotation
+        (setf (js2-var-init-node-type-annotation vi) type-annotation))
       (setf (js2-var-init-node-initializer vi) init)
-      (js2-node-add-children vi name destructuring init)
+      (js2-node-add-children vi name destructuring type-annotation init)
       (js2-block-node-push result vi)
       (unless (js2-match-token js2-COMMA)
         (setq continue nil)))
@@ -11135,6 +11164,56 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
     (if check-activation-p
         (js2-check-activation-name s (or token js2-NAME)))
     name))
+
+;;; Typed supports. Current support flow, the typescript support maybe coming soon.
+
+(defvar js2-typed-syntax 'flow "js2 type syntax, flow or typescript.")
+
+(defun js2-parse-type-annotation ()
+  "Parse type annotation."
+  (when (js2-match-token js2-COLON)
+    (js2-create-type-node)))
+
+(defun js2-create-type-node ()
+  "Create type annoation node."
+  (let ((beg (js2-current-token-beg))
+        (type (js2-get-token)))
+    (make-js2-type-annotation-node :pos beg
+                                   :len (- (js2-current-token-end) beg)
+                                   :type-annotation nil)))
+
+(defun js2-parse-union-type ()
+  "Parse union type. like:
+var v: a | b"
+  )
+
+(defun js2-parse-intersection-type ()
+  "Parse union type. like:
+var v: a & b"
+  )
+
+(defun js2-parse-free-function-type ()
+  "Parse function type without parens wrap the params. like:
+var v: a => b"
+  )
+
+(defun js2-parse-maybe-type ()
+  "Parse maybe type. like:
+var v: ?a"
+  )
+
+(defun js2-parse-array-type ()
+  "Parse array type. like:
+var v: a[]"
+  )
+
+(defun js2-parse-type ()
+  "Parse type tokens."
+  )
+
+(defun js2-parse-primitive-type ()
+  "Parse primitive type."
+  )
 
 ;;; Use AST to extract semantic information
 
