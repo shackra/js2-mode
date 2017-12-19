@@ -8470,7 +8470,7 @@ for strict mode errors caused by PARAMS."
           (js2-report-error "msg.dup.param.strict" param-name
                             (js2-node-abs-pos param) (js2-node-len param)))))))
 
-(defun js2-parse-function-params (function-type fn-node pos)
+(defun js2-parse-function-params (function-type fn-node pos &optional type-p)
   "Parse the parameters of a function of FUNCTION-TYPE
 represented by FN-NODE at POS."
   ;; TODOF
@@ -8510,8 +8510,9 @@ represented by FN-NODE at POS."
                  (js2-define-symbol js2-LP (js2-current-token-string) param)
                  (js2-check-strict-function-params param-name-nodes (list param))
                  (setq param-name-nodes (append param-name-nodes (list param)))
-                 ;; parse function type params
-                 (when (js2-match-token js2-COLON)
+                 ;; flow parse function type params
+                 (when (and type-p
+                            (js2-match-token js2-COLON))
                    (js2-unget-token)
                    (setq type (js2-flow-parse-type-annotation)))
                  ))
@@ -8603,7 +8604,7 @@ Last token scanned is the close-curly for the function body."
     (js2-must-match js2-LP "msg.no.paren.parms")
     (js2-parse-function 'FUNCTION_EXPRESSION pos star-p async-p name)))
 
-(defun js2-parse-function-internal (function-type pos star-p &optional async-p name)
+(defun js2-parse-function-internal (function-type pos star-p &optional async-p name type-p exact-p)
   (let (fn-node lp)
     (if (= (js2-current-token-type) js2-LP) ; eventually matched LP?
         (setq lp (js2-current-token-beg)))
@@ -8637,13 +8638,14 @@ Last token scanned is the close-curly for the function body."
           js2-label-set
           js2-loop-set
           js2-loop-and-switch-set)
-      (js2-parse-function-params function-type fn-node pos)
+      (js2-parse-function-params function-type fn-node pos type-p)
       (when (eq function-type 'FUNCTION_ARROW)
         (js2-must-match js2-ARROW "msg.bad.arrow.args"))
-      ;; parse function return type
-      (when (js2-match-token js2-COLON)
+      ;; flow parse function return type
+      (when (and type-p
+                 (js2-match-token js2-COLON))
         (js2-unget-token)
-        (setq type (js2-flow-parse-type-annotation))
+        (setq type (js2-flow-parse-type-annotation exact-p))
         ;; parse predicate annotation %checks
         ;; need js2-ti-max-lookahead >= 2
         (when (and (js2-match-token js2-MOD))
@@ -8653,11 +8655,19 @@ Last token scanned is the close-curly for the function body."
                   (js2-unget-token))
               (js2-set-face (1- (js2-current-token-beg)) (js2-current-token-end)
                             'js2-flow-primitive-type 'record)))))
-      (if (and (>= js2-language-version 180)
-               (/= (js2-peek-token) js2-LC))
-          (js2-parse-function-closure-body fn-node)
-        (js2-parse-function-body fn-node))
-      (js2-check-inconsistent-return-warning fn-node name)
+
+      ;; flow object type parse ignore the function body
+      (unless type-p
+        (if (and (>= js2-language-version 180)
+                 (/= (js2-peek-token) js2-LC))
+            (js2-parse-function-closure-body fn-node)
+          (js2-parse-function-body fn-node))
+        (js2-check-inconsistent-return-warning fn-node name))
+      ;; (if (and (>= js2-language-version 180)
+      ;;          (/= (js2-peek-token) js2-LC))
+      ;;     (js2-parse-function-closure-body fn-node)
+      ;;   (js2-parse-function-body fn-node))
+      ;; (js2-check-inconsistent-return-warning fn-node name)
 
       (when name
         (js2-node-add-children fn-node name)
@@ -8680,7 +8690,7 @@ Last token scanned is the close-curly for the function body."
     (setf (js2-scope-parent-scope fn-node) js2-current-scope)
     fn-node))
 
-(defun js2-parse-function (function-type pos star-p &optional async-p name)
+(defun js2-parse-function (function-type pos star-p &optional async-p name type-p exact-p)
   "Function parser.  FUNCTION-TYPE is a symbol, POS is the
 beginning of the first token (function keyword, unless it's an
 arrow function), NAME is js2-name-node."
@@ -8696,7 +8706,7 @@ arrow function), NAME is js2-name-node."
       (setq ts-state (make-js2-ts-state))
       (setq continue (catch 'reparse
                        (setq fn-node (js2-parse-function-internal
-                                      function-type pos star-p async-p name))
+                                      function-type pos star-p async-p name type-p exact-p))
                        ;; Don't continue.
                        nil))
       (when continue
@@ -9998,24 +10008,24 @@ expression and return it wrapped in a `js2-expr-stmt-node'."
 
 (js2-deflocal js2-flow-in-type-annotation nil)
 
-(defun js2-flow-parse-type-annotation ()
+(defun js2-flow-parse-type-annotation (&optional exact-p)
   "Parse flow type annoation syntax."
   ;; TODO parse type annoation not safe.
   ;; TODO parse failed for var v: A<a, B<b, C<c>>> >>= 42;
   (setq js2-flow-in-type-annotation t)
   (when (js2-match-token js2-COLON)
-    (js2-flow-parse-type)
+    (js2-flow-parse-type nil exact-p)
     (setq js2-flow-in-type-annotation nil)))
 
-(defun js2-flow-parse-type (&optional decl-p)
+(defun js2-flow-parse-type (&optional decl-p exact-p)
   "Parse flow type."
   (let* ((beg (js2-current-token-beg))
-         (node (js2-flow-parse-union-type decl-p)))
+         (node (js2-flow-parse-union-type decl-p exact-p)))
     (make-js2-flow-type-node :pos beg
                              :len (- (js2-current-token-end) beg)
                              :type-annotation node)))
 
-(defun js2-flow-parse-union-type (&optional decl-p)
+(defun js2-flow-parse-union-type (&optional decl-p exact-p)
   "Parse flow union type like:
 const v: a | b;
 "
@@ -10027,7 +10037,8 @@ const v: a | b;
       (push (js2-flow-parse-intersection-type decl-p) types))
     ;; for {| foo: number |}
     ;; -------------------^ not a union type
-    (when (= (js2-peek-token) js2-RC)
+    (when (and (= (js2-peek-token) js2-RC)
+               exact-p)
       (js2-unget-token))
     (if (cdr types)
         types
@@ -10053,8 +10064,13 @@ const v: a & b;
          (pos (js2-current-token-beg))
          (len (js2-current-token-len))
          node)
-    (print tt)
+
     (cond
+     ((= tt js2-HOOK)
+      (js2-set-face pos (js2-current-token-end)
+                    'js2-flow-primitive-type 'record)
+      ;; maybe ?
+      (js2-flow-parse-primary-type decl-p))
      ((= tt js2-NAME)
       (cond
        ((string= name "any")
@@ -10104,7 +10120,6 @@ const v: a & b;
         (when (js2-match-token js2-BITOR)
           (setq end-delim js2-BITOR))
         (js2-parse-object-literal-elems nil t end-delim))
-
       ;; TODO set node
       nil)
      ((= tt js2-LB)
@@ -10121,6 +10136,19 @@ const v: a & b;
         ;; TODO set node
         nil))
      ((= tt js2-LP)
+      ;; TODO flow function type
+      (js2-parse-function-params nil
+                                 (make-js2-function-node :pos pos
+                                                         :name nil
+                                                         :form nil
+                                                         :lp nil
+                                                         :generator-type nil
+                                                         :async nil)
+                                 pos t)
+      (when (js2-peek-token js2-COLON)
+        ;; should must match js2-COLON
+        (js2-flow-parse-type-annotation exact-p))
+      ;; TODO set node
       nil)
      ((or (= tt js2-TRUE)
           (= tt js2-FALSE)
@@ -10142,6 +10170,9 @@ const v: a & b;
      (t
       ;; (print (js2-current-token))
       ))
+    ;; parse Array type Type[]
+    (when (js2-match-token js2-LB)
+      (js2-must-match js2-RB "msg.syntax"))
     ;; (unless node
     ;;   (js2-report-error "msg.syntax"))
     node))
@@ -11581,7 +11612,7 @@ expression)."
               elem (js2-make-unary nil js2-TRIPLEDOT 'js2-parse-assign-expr)))
        ((member tt (list js2-NAME js2-STRING js2-NUMBER js2-LB))
         (setq after-comma nil
-              elem (js2-parse-named-prop tt previous-token class-p type-p))
+              elem (js2-parse-named-prop tt previous-token class-p type-p (if end-delim t nil)))
         (if (and (null elem)
                  (not js2-recover-from-parse-errors))
             (setq continue nil)))
@@ -11645,7 +11676,7 @@ expression)."
     (js2-must-match js2-RC "msg.no.brace.prop")
     (nreverse elems)))
 
-(defun js2-parse-named-prop (tt previous-token &optional class-p type-p)
+(defun js2-parse-named-prop (tt previous-token &optional class-p type-p exact-p)
   "Parse a name, string, or getter/setter object property.
 When `js2-is-in-destructuring' is t, forms like {a, b, c} will be permitted."
   (let ((key (js2-parse-prop-name tt type-p))
@@ -11674,7 +11705,7 @@ When `js2-is-in-destructuring' is t, forms like {a, b, c} will be permitted."
       (when (or (js2-name-node-p key) (js2-string-node-p key))
         ;; highlight function name properties
         (js2-record-face 'font-lock-function-name-face))
-      (js2-parse-method-prop pos key property-type))
+      (js2-parse-method-prop pos key property-type type-p exact-p))
      ;; class field or binding element with initializer
      ((and (= (js2-peek-token) js2-ASSIGN)
            (>= js2-language-version 200))
@@ -11685,7 +11716,7 @@ When `js2-is-in-destructuring' is t, forms like {a, b, c} will be permitted."
      ;; parse flow prop types, like p: number
      ((and (or class-p type-p)
            (= (js2-peek-token) js2-COLON))
-      (setq type (js2-flow-parse-type-annotation))
+      (setq type (js2-flow-parse-type-annotation exact-p))
       ;; also with initializer, like p: number = 42
       (when (and (not type-p) class-p
                  (= (js2-peek-token) js2-ASSIGN))
@@ -11790,7 +11821,7 @@ string or expression."
       (js2-node-add-children result prop expr)
       result))))
 
-(defun js2-parse-method-prop (pos prop type-string)
+(defun js2-parse-method-prop (pos prop type-string &optional type-p exact-p)
   "Parse method property in an object literal or a class body.
 JavaScript syntax is:
 
@@ -11814,7 +11845,8 @@ TYPE-STRING is a string `get', `set', `*', or nil, indicating a found keyword."
          (fn (js2-parse-function 'FUNCTION_EXPRESSION pos
                                  (string= type-string "*")
                                  (eq type 'ASYNC)
-                                 nil)))
+                                 nil
+                                 type-p exact-p)))
     (js2-node-set-prop fn 'METHOD_TYPE type)  ; for codegen
     (unless pos (setq pos (js2-node-pos prop)))
     (setq end (js2-node-end fn)
