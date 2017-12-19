@@ -10035,8 +10035,9 @@ const v: a | b;
     (while (and (js2-match-token js2-BITOR)
                 (/= (js2-peek-token) js2-RC))
       (push (js2-flow-parse-intersection-type decl-p) types))
-    ;; for {| foo: number |}
+    ;; {| foo: number |}
     ;; -------------------^ not a union type
+    ;; TODO add {| and |} to tokens list
     (when (and (= (js2-peek-token) js2-RC)
                exact-p)
       (js2-unget-token))
@@ -10050,12 +10051,53 @@ const v: a & b;
 "
   (let (types)
     (js2-match-token js2-BITAND)
-    (push (js2-flow-parse-primary-type decl-p) types)
+    (push (js2-parse-function-free-arrow-type decl-p) types)
     (while (js2-match-token js2-BITAND)
-      (push (js2-flow-parse-primary-type decl-p) types))
+      (push (js2-parse-function-free-arrow-type decl-p) types))
     (if (cdr types)
         types
       (car types))))
+
+(defun js2-parse-function-free-arrow-type (&optional decl-p)
+  "Parse flow a => b or a"
+  (let ((param (js2-flow-parse-primary-type decl-p)))
+    (if (not (js2-match-token js2-ARROW))
+        param
+      ;; A function type
+      (js2-flow-parse-type))))
+
+;; (defun js2-parse-maybe-type ()
+;;   "Parse flow maybe type eg. ?number"
+;;   (if (js2-match-token js2-HOOK)
+;;       ;; match ??Type, what's this ??
+;;       (js2-parse-maybe-type)
+;;     ;; match ?[]
+;;     (js2-flow-parse-array-type)))
+
+;; (defun js2-parse-array-type ()
+;;   "Parse flow array type eg. number[]"
+;;   (js2-flow-parse-primary-type)
+;;   (when (js2-match-token js2-LB)
+;;     ;; Todo msg type
+;;     (js2-must-match js2-RB "msg.syntax")))
+
+(defun js2-parse-function-type-param ()
+  "Parse flow function type params."
+  (let ((tt (js2-get-token))
+        (next-tt (js2-peek-token)))
+    (if (not (or (= next-tt js2-COLON)
+                 (= next-tt js2-HOOK)))
+        (progn
+          (js2-unget-token)
+          (js2-flow-parse-type))
+      ;; match name: or name?
+      ;; TODO don't check, just parse name
+      ;; (js2-parse-name (js2-current-token))
+      ;; match name?
+      (when (js2-match-token js2-HOOK)
+        (js2-set-face (js2-current-token-beg) (js2-current-token-end)
+                      'js2-flow-primitive-type 'record))
+      (js2-flow-parse-type-annotation))))
 
 (defun js2-flow-parse-primary-type (&optional decl-p)
   "Parse flow primitive type."
@@ -10064,7 +10106,9 @@ const v: a & b;
          (pos (js2-current-token-beg))
          (len (js2-current-token-len))
          node)
-
+    (print "TOKEN")
+    (print tt)
+    (print name)
     (cond
      ((= tt js2-HOOK)
       (js2-set-face pos (js2-current-token-end)
@@ -10136,18 +10180,27 @@ const v: a & b;
         ;; TODO set node
         nil))
      ((= tt js2-LP)
-      ;; TODO flow function type
-      (js2-parse-function-params nil
-                                 (make-js2-function-node :pos pos
-                                                         :name nil
-                                                         :form nil
-                                                         :lp nil
-                                                         :generator-type nil
-                                                         :async nil)
-                                 pos t)
-      (when (js2-peek-token js2-COLON)
-        ;; should must match js2-COLON
-        (js2-flow-parse-type-annotation exact-p))
+      (if (js2-match-token js2-RP)
+          ;; match () =>
+          (if (not (js2-match-token js2-ARROW))
+              (js2-report-error "msg.syntax")
+            ;; TODO decl-p?
+            (js2-flow-parse-type))
+        ;; match (Type)  or  (name: Type) =>  or  (Type) =>
+        (let ((continue t)
+              params)
+          (while continue
+            (push (js2-parse-function-type-param) params)
+            (print params)
+            (unless (js2-match-token js2-COMMA)
+              (setq continue nil)
+              ;; (print (js2-current-token))
+              (unless (js2-match-token js2-RP)
+                (js2-report-error "msg.syntax")))))
+        ;; (print (js2-current-token))
+        (js2-match-token js2-ARROW)
+        (js2-flow-parse-type)
+        )
       ;; TODO set node
       nil)
      ((or (= tt js2-TRUE)
@@ -10169,6 +10222,7 @@ const v: a & b;
       (js2-unget-token))
      (t
       ;; (print (js2-current-token))
+      (js2-unget-token)
       ))
     ;; parse Array type Type[]
     (when (js2-match-token js2-LB)
@@ -10272,9 +10326,9 @@ Returns the parsed `js2-var-decl-node' expression node."
                 end nend)
           (js2-define-symbol decl-type (js2-current-token-string) name js2-in-for-init)
           (js2-check-strict-identifier name)))
-      ;; parse flow type annotation
-      (when (js2-match-token js2-COLON)
-        (js2-unget-token)
+      ;; parse flow variable type annotation
+      ;; var a: TypeAnnotation
+      (when (js2-peek-token js2-COLON)
         (setq type (js2-flow-parse-type-annotation)))
       (when (js2-match-token js2-ASSIGN)
         (setq init (js2-parse-assign-expr)
