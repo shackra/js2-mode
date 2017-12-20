@@ -3391,7 +3391,8 @@ The type field will be js2-CONST for a const decl."
         (ta (js2-var-init-node-type-annotation n)))
     (insert pad)
     (js2-print-ast name 0)
-    (js2-print-ast ta 0)
+    (when ta
+      (js2-print-ast ta 0))
     (when init
       (insert " = ")
       (js2-print-ast init 0))))
@@ -4546,7 +4547,350 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
 (defun js2-print-type-annotation-node (n i)
   ;; TODO replace type node.
   (insert ": ")
+  (js2-print-ast (js2-type-annotation-node-type-annotation n) 0)
+  ;; (insert "number")
+  )
+
+(cl-defstruct (js2-type-params-node
+               (:include js2-node)
+               (:constructor make-js2-type-params-node (&key (type js2-GT)
+                                                                 (pos js2-ts-cursor)
+                                                                 len
+                                                                 params
+                                                                 empty-p)))
+  "AST node for type params node."
+  params
+  empty-p)  ; e.g. a<>
+
+(js2--struct-put 'js2-type-params-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-type-params-node 'js2-printer 'js2-print-type-params-node)
+
+(defun js2-print-type-params-node (n i)
+  (let ((params (js2-type-params-node-params n)))
+    (insert "<")
+    (when params
+      (js2-print-ast (car params) 0)
+      (dolist (param (cdr params))
+        (insert ", ")
+        (js2-print-ast param 0)))
+    (insert ">")))
+
+(cl-defstruct (js2-union-type-node
+               (:include js2-node)
+               (:constructor make-js2-union-type-node (&key (type js2-BITOR)
+                                                            (pos js2-ts-cursor)
+                                                            len types)))
+  "AST node for union type."
+  types)  ; union types
+
+(js2--struct-put 'js2-union-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-union-type-node 'js2-printer 'js2-print-union-type-node)
+
+(defun js2-print-union-type-node (n i)
+  (insert ("| ")
+          ))
+
+(cl-defstruct (js2-intersection-type-node
+               (:include js2-node)
+               (:constructor make-js2-intersection-type-node (&key (type js2-BITOR)
+                                                                   (pos js2-ts-cursor)
+                                                                   len types)))
+  "AST node for intersection type."
+  types)  ; intersection types
+
+(js2--struct-put 'js2-intersection-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-intersection-type-node 'js2-printer 'js2-print-intersection-type-node)
+
+(defun js2-print-intersection-type-node (n i)
+  (insert ("& ")
+          ))
+
+(cl-defstruct (js2-function-type-node
+               (:include js2-node)
+               (:constructor make-js2-function-type-node (&key (type js2-FUNCTION)
+                                                                   (pos js2-ts-cursor)
+                                                                   len
+                                                                   types)))
+  "AST node for function type."
+  types)  ; function types
+
+(js2--struct-put 'js2-function-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-function-type-node 'js2-printer 'js2-print-function-type-node)
+
+(defun js2-print-function-type-node (n i)
+  (insert ("& ")
+          ))
+
+(cl-defstruct (js2-number-type-node
+               (:include js2-node)
+               (:constructor make-js2-number-type-node (&key (type js2-NAME)
+                                                             (pos js2-ts-cursor)
+                                                             (len (string-width "number")))))
+  "AST node for number primitive type.")
+
+(js2--struct-put 'js2-number-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-number-type-node 'js2-printer 'js2-print-number-type-node)
+
+(defun js2-print-number-type-node (n i)
   (insert "number"))
+
+(cl-defstruct (js2-string-type-node
+               (:include js2-node)
+               (:constructor make-js2-string-type-node (&key (type js2-NAME)
+                                                             (pos js2-ts-cursor)
+                                                             (len (string-width "string")))))
+  "AST node for string primitive type.")
+
+(js2--struct-put 'js2-string-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-string-type-node 'js2-printer 'js2-print-string-type-node)
+
+(defun js2-print-string-type-node (n i)
+  (insert "string"))
+
+(cl-defstruct (js2-boolean-type-node
+               (:include js2-node)
+               (:constructor make-js2-boolean-type-node (&key (type js2-NAME)
+                                                              (pos js2-ts-cursor)
+                                                              len short-p)))
+  "AST node for boolean primitive type."
+  short-p)  ; short for boolean type, e.g. var t: bool
+
+(js2--struct-put 'js2-boolean-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-boolean-type-node 'js2-printer 'js2-print-boolean-type-node)
+
+(defun js2-print-boolean-type-node (n i)
+  (insert (if (js2-boolean-type-node-short-p n) "bool" "boolean")))
+
+(cl-defstruct (js2-any-type-node
+               (:include js2-node)
+               (:constructor make-js2-any-type-node (&key (type js2-NAME)
+                                                          (pos js2-ts-cursor)
+                                                          (len (string-width "any")))))
+  "AST node for any primitive type.")
+
+(js2--struct-put 'js2-any-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-any-type-node 'js2-printer 'js2-print-any-type-node)
+
+(defun js2-print-any-type-node (n i)
+  (insert "any"))
+
+(cl-defstruct (js2-mixed-type-node
+               (:include js2-node)
+               (:constructor make-js2-mixed-type-node (&key (type js2-NAME)
+                                                            (pos js2-ts-cursor)
+                                                            (len (string-width "mixed")))))
+  "AST node for mixed primitive type.")
+
+(js2--struct-put 'js2-mixed-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-mixed-type-node 'js2-printer 'js2-print-mixed-type-node)
+
+(defun js2-print-mixed-type-node (n i)
+  (insert "mixed"))
+
+(cl-defstruct (js2-empty-type-node
+               (:include js2-node)
+               (:constructor make-js2-empty-type-node (&key (type js2-NAME)
+                                                            (pos js2-ts-cursor)
+                                                            (len (string-width "empty")))))
+  "AST node for empty primitive type.")
+
+(js2--struct-put 'js2-empty-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-empty-type-node 'js2-printer 'js2-print-empty-type-node)
+
+(defun js2-print-empty-type-node (n i)
+  (insert "empty"))
+
+(cl-defstruct (js2-void-type-node
+               (:include js2-node)
+               (:constructor make-js2-void-type-node (&key (type js2-VOID)
+                                                           (pos js2-ts-cursor)
+                                                           (len (string-width "void")))))
+  "AST node for void primitive type.")
+
+(js2--struct-put 'js2-void-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-void-type-node 'js2-printer 'js2-print-void-type-node)
+
+(defun js2-print-void-type-node (n i)
+  (insert "void"))
+
+(cl-defstruct (js2-star-type-node
+               (:include js2-node)
+               (:constructor make-js2-star-type-node (&key (type js2-MUL)
+                                                           (pos js2-ts-cursor)
+                                                           (len (string-width "*")))))
+  "AST node for star primitive type.")
+
+(js2--struct-put 'js2-star-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-star-type-node 'js2-printer 'js2-print-star-type-node)
+
+(defun js2-print-star-type-node (n i)
+  (insert "*"))
+
+(cl-defstruct (js2-this-type-node
+               (:include js2-node)
+               (:constructor make-js2-this-type-node (&key (type js2-MUL)
+                                                           (pos js2-ts-cursor)
+                                                           (len (string-width "this")))))
+  "AST node for this primitive type.")
+
+(js2--struct-put 'js2-this-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-this-type-node 'js2-printer 'js2-print-this-type-node)
+
+(defun js2-print-this-type-node (n i)
+  (insert "this"))
+
+(cl-defstruct (js2-null-type-node
+               (:include js2-node)
+               (:constructor make-js2-null-type-node (&key (type js2-MUL)
+                                                           (pos js2-ts-cursor)
+                                                           (len (string-width "null")))))
+  "AST node for null primitive type.")
+
+(js2--struct-put 'js2-null-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-null-type-node 'js2-printer 'js2-print-null-type-node)
+
+(defun js2-print-null-type-node (n i)
+  (insert "null"))
+
+(cl-defstruct (js2-undefined-type-node
+               (:include js2-node)
+               (:constructor make-js2-undefined-type-node (&key (type js2-MUL)
+                                                                (pos js2-ts-cursor)
+                                                                (len (string-width "undefined")))))
+  "AST node for undefined primitive type.")
+
+(js2--struct-put 'js2-undefined-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-undefined-type-node 'js2-printer 'js2-print-undefined-type-node)
+
+(defun js2-print-undefined-type-node (n i)
+  (insert "undefined"))
+
+(cl-defstruct (js2-literal-number-type-node
+               (:include js2-node)
+               (:constructor make-js2-literal-number-type-node (&key (type js2-NUMBER)
+                                                                     (pos js2-ts-cursor)
+                                                                     len
+                                                                     value
+                                                                     negative-p)))
+  "AST node for number literal- type."
+  value
+  negative-p)
+
+(js2--struct-put 'js2-literal-number-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-literal-number-type-node 'js2-printer 'js2-print-literal-number-type-node)
+
+(defun js2-print-literal-number-type-node (n i)
+  (let ((neg-p (js2-literal-number-type-node-negative-p n))
+        (value (js2-literal-number-type-node-value n)))
+    (when neg-p
+      (insert "-"))
+    (insert value)))
+
+(cl-defstruct (js2-literal-string-type-node
+               (:include js2-node)
+               (:constructor make-js2-literal-string-type-node (&key (type js2-STRING)
+                                                                     (pos js2-ts-cursor)
+                                                                     len value)))
+  "AST node for string literal type."
+  value)
+
+(js2--struct-put 'js2-literal-string-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-literal-string-type-node 'js2-printer 'js2-print-literal-string-type-node)
+
+(defun js2-print-literal-string-type-node (n i)
+  (insert (js2-literal-string-type-node-value n)))
+
+(cl-defstruct (js2-literal-boolean-type-node
+               (:include js2-node)
+               (:constructor make-js2-literal-boolean-type-node (&key (type js2-NAME)
+                                                                      (pos js2-ts-cursor)
+                                                                      len)))
+  "AST node for boolean literal type.")
+
+(js2--struct-put 'js2-literal-boolean-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-literal-boolean-type-node 'js2-printer 'js2-print-literal-boolean-type-node)
+
+(defun js2-print-literal-boolean-type-node (n i)
+  (let ((type (js2-literal-boolean-type-node-type n)))
+    (insert (if (= type js2-TRUE) "true" "false"))))
+
+(cl-defstruct (js2-generic-type-node
+               (:include js2-node)
+               (:constructor make-js2-generic-type-node (&key (type js2-NAME)
+                                                              (pos js2-ts-cursor)
+                                                              len
+                                                              name
+                                                              params)))
+  "AST node for generic type."
+  name
+  params)
+
+(js2--struct-put 'js2-generic-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-generic-type-node 'js2-printer 'js2-print-generic-type-node)
+
+(defun js2-print-generic-type-node (n i)
+  (js2-print-ast (js2-generic-type-node-name n) 0)
+  (let ((params (js2-generic-type-node-params n)))
+    (when params
+      (js2-print-ast params 0))))
+
+(cl-defstruct (js2-qualified-type-node
+               (:include js2-node)
+               (:constructor make-js2-qualified-type-node (&key (type js2-NAME)
+                                                                (pos js2-ts-cursor)
+                                                                len
+                                                                name
+                                                                member)))
+  "AST node for qualified type."
+  name
+  member)
+
+(js2--struct-put 'js2-qualified-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-qualified-type-node 'js2-printer 'js2-print-qualified-type-node)
+
+(defun js2-print-qualified-type-node (n i)
+  (js2-print-ast (js2-qualified-type-node-name n) 0)
+  (insert ".")
+  (js2-print-ast (js2-qualified-type-node-member n) 0))
+
+(cl-defstruct (js2-maybe-type-node
+               (:include js2-node)
+               (:constructor make-js2-maybe-type-node (&key type
+                                                            (pos js2-ts-cursor)
+                                                            len
+                                                            type-annotation)))
+  "AST node for maybe type."
+  type-annotation)
+
+(js2--struct-put 'js2-maybe-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-maybe-type-node 'js2-printer 'js2-print-maybe-type-node)
+
+(defun js2-print-maybe-type-node (n i)
+  (insert "?")
+  (js2-print-ast (js2-maybe-type-node-type-annotation n) 0))
+
+(cl-defstruct (js2-array-type-node
+               (:include js2-node)
+               (:constructor make-js2-array-type-node (&key type
+                                                            (pos js2-ts-cursor)
+                                                            len
+                                                            type-annotation
+                                                            brackets)))
+  "AST node for array type."
+  type-annotation
+  brackets)  ; suffix brackets number, e.g. a[][] have two brackets
+
+(js2--struct-put 'js2-array-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-array-type-node 'js2-printer 'js2-print-array-type-node)
+
+(defun js2-print-array-type-node (n i)
+  (let ((ta (js2-array-type-node-type-annotation n))
+        (bks (js2-array-type-node-brackets n)))
+    (js2-print-ast ta 0)
+    (dotimes (_ bks)
+      (insert "[]"))))
+
+
 
 ;;; Node utilities
 
@@ -11177,14 +11521,13 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
 (defun js2-create-type-node ()
   "Create type annoation node."
   (let ((beg (js2-current-token-beg))
-        (type (js2-get-token)))
+        (type (js2-parse-maybe-type)))
     (make-js2-type-annotation-node :pos beg
                                    :len (- (js2-current-token-end) beg)
-                                   :type-annotation nil)))
+                                   :type-annotation type)))
 
 (defun js2-parse-union-type ()
-  "Parse union type. like:
-var v: a | b"
+  "Parse union type, e.g. var v: a | b"
   )
 
 (defun js2-parse-intersection-type ()
@@ -11193,27 +11536,163 @@ var v: a & b"
   )
 
 (defun js2-parse-free-function-type ()
-  "Parse function type without parens wrap the params. like:
-var v: a => b"
+  "Parse function type without parens wrap the params, e.g. var v: a => b"
   )
 
 (defun js2-parse-maybe-type ()
-  "Parse maybe type. like:
-var v: ?a"
-  )
+  "Parse maybe type. e.g, var v: ?a"
+  (let ((beg (js2-current-token-beg)))
+    (if (js2-match-token js2-HOOK)
+        (make-js2-maybe-type-node :pos beg
+                                  :len (- (js2-current-token-end) beg)
+                                  :type-annotation (js2-parse-maybe-type))
+      (js2-parse-array-type))))
 
 (defun js2-parse-array-type ()
-  "Parse array type. like:
-var v: a[]"
-  )
+  "Parse array type, e.g. var v: a[]"
+  (let ((beg (js2-current-token-beg))
+        (continue t)
+        (brackets 0)
+        node)
+    (setq node (js2-parse-type))
+    (while (and continue
+                (js2-match-token js2-LB))
+      (let ((pos (js2-current-token-beg))
+            (len (js2-current-token-len)))
+        (if (js2-match-token js2-RB)
+            (setq brackets (1+ brackets))
+          (setq continue nil)
+          ;; Todo msg type
+          (js2-must-match js2-RB "msg.syntax" pos len))))
+    (if (= 0 brackets)
+        node
+      (make-js2-array-type-node :pos beg
+                                :len (- (js2-current-token-end) beg)
+                                :type-annotation node
+                                :brackets brackets))))
 
 (defun js2-parse-type ()
   "Parse type tokens."
-  )
+  (let ((tt (js2-get-token))
+        (beg (js2-current-token-beg)))
+    (cond
+     ;; primitive type
+     ((= tt js2-NAME)
+      (js2-parse-primitive-type))
+     ;; literal type
+     ((and (= tt js2-SUB)
+           (js2-match-token js2-NUMBER))
+      (make-js2-literal-number-type-node :len (- (js2-current-token-end) beg)
+                                         :value (js2-current-token-string)
+                                         :negative-p t))
+     ((= tt js2-NUMBER)
+      (make-js2-literal-number-type-node :len (- (js2-current-token-end) beg)
+                                         :value (js2-current-token-string)
+                                         :negative-p nil))
+     ((= tt js2-STRING)
+      (print tt)
+      (make-js2-literal-string-type-node :len (- (js2-current-token-end) beg)
+                                         :value (js2-current-token-string)))
+     ((or (= tt js2-TRUE)
+          (= tt js2-FALSE))
+      (make-js2-literal-boolean-type-node :len (- (js2-current-token-end) beg)
+                                          :type tt))
+     ((= tt js2-VOID)
+      (make-js2-void-type-node))
+     ((= tt js2-THIS)
+      (make-js2-this-type-node))
+     ((= tt js2-MUL)
+      (make-js2-star-type-node))
+     ((= tt js2-NULL)
+      (make-js2-null-type-node))
+     ;; failed
+     (t
+      (js2-unget-token)))))
 
 (defun js2-parse-primitive-type ()
   "Parse primitive type."
-  )
+  (let ((name (js2-current-token-string))
+        node)
+    (cond
+     ((string= name "number")
+      (setq node (make-js2-number-type-node)))
+     ((string= name "string")
+      (setq node (make-js2-string-type-node)))
+     ((string= name "bool")
+      (setq node (make-js2-boolean-type-node :len (string-width "bool")
+                                             :short-p t)))
+     ((string= name "boolean")
+      (setq node (make-js2-boolean-type-node :len (string-width "boolean")
+                                             :short-p nil)))
+     ((string= name "any")
+      (setq node (make-js2-any-type-node)))
+     ((string= name "mixed")
+      (setq node (make-js2-mixed-type-node)))
+     ((string= name "undefined")
+      (setq node (make-js2-undefined-type-node)))
+     ((string= name "empty")
+      (setq node (make-js2-empty-type-node)))
+     ;; parse generic type
+     (t
+      (js2-unget-token)
+      (setq node (js2-parse-generic-type))))
+    node))
+
+(defun js2-parse-generic-type ()
+  "Parse generic type, e.g. var a: b"
+  (let ((pos (js2-current-token-beg))
+        name params)
+    ;; parse name
+    (setq name (js2-parse-generic-type-name))
+    ;; parse type params
+    (when (= (js2-peek-token) js2-LT)
+      (setq params (js2-parse-type-params)))
+    (make-js2-generic-type-node :pos pos
+                                :len (- (js2-current-token-end) pos)
+                                :name name
+                                :params params)))
+
+(defun js2-parse-generic-type-name ()
+  "Parse generic type name, e.g. a or a.b"
+  (let ((pos (js2-current-token-beg))
+        (continue t)
+        node member)
+    (when (js2-match-token js2-NAME)
+      (setq node (js2-parse-name (js2-current-token)))
+      ;; (when decl-p
+      ;;   (js2-define-symbol
+      ;;    js2-LET (js2-name-node-name node) node t))
+      (while (and continue (js2-match-token js2-DOT))
+        (if (= (js2-peek-token) js2-NAME)
+            (setq member (js2-parse-generic-type-name))
+          (setq continue nil)
+          (js2-report-error "msg.syntax"))))
+    (if (not member)
+        node
+      (make-js2-qualified-type-node :pos pos
+                                    :len (js2-current-token-len)
+                                    :name node
+                                    :member member))))
+
+(defun js2-parse-type-params (&optional decl-p)
+  "Parse type params, e.g. <a, b>"
+  (let ((pos (js2-current-token-beg))
+        (continue t)
+        params)
+    (when (js2-match-token js2-LT)
+      (if (js2-match-token js2-GT)
+          (make-js2-type-params-node :pos pos
+                                     :len (- (js2-current-token-end) pos))
+        (while continue
+          ;; TODO decl-p, in type params state.
+          (push (js2-parse-type) params)
+          (unless (js2-match-token js2-COMMA)
+            (setq continue nil)
+            (unless (js2-match-token js2-GT)
+              (js2-report-error "msg.syntax"))))
+        (make-js2-type-params-node :params (nreverse params)
+                                   :pos pos
+                                   :len (- (js2-current-token-end) pos))))))
 
 ;;; Use AST to extract semantic information
 

@@ -101,11 +101,142 @@ the test."
 ;;; Type annotations
 
 ;; Primitive type
+
 (js2-deftest-parse flow-primitive-number-type
-                   "var a: number = 42;")
+  "var a: number;")
 
-;; (js2-deftest-parse flow-primitive-Number-type
-;;   "var a: Number;")
+(js2-deftest-parse flow-primitive-string-type
+  "var a: string;")
 
-;; (js2-deftest-parse flow-primitive-string-type
-;;   "var a: string;")
+(js2-deftest-parse flow-primitive-boolean-type
+  "var a: boolean;")
+
+(js2-deftest-parse flow-primitive-bool-type
+  "var a: bool;")
+
+(js2-deftest-parse flow-primitive-any-type
+  "var a: any;")
+
+(js2-deftest-parse flow-primitive-mixed-type
+  "var a: mixed;")
+
+(js2-deftest-parse flow-primitive-empty-type
+  "var a: empty;")
+
+;; Literal type
+
+(js2-deftest-parse flow-literal-number-type
+  "var a: 42;")
+
+(js2-deftest-parse flow-literal-number-negative-type
+  "var a: -42;")
+
+(js2-deftest-parse flow-literal-number-dot-type
+  "var a: .42;")
+
+(js2-deftest-parse flow-literal-number-e-type
+  "var a: 1e42;")
+
+;; (js2-deftest-parse flow-literal-number-hex-type
+;;   "var a: 0x42;")
+
+;; (js2-deftest-parse flow-literal-string-type
+;;   "var a: 'foo';")
+
+;; (js2-deftest-parse flow-literal-string-double-quote-type
+;;   "var a: \"foo\";")
+
+(js2-deftest-parse flow-literal-true-type
+  "var a: true;")
+
+(js2-deftest-parse flow-literal-false-type
+  "var a: false;")
+
+(js2-deftest-parse flow-literal-null-type
+  "var a: null;")
+
+(js2-deftest-parse flow-literal-undefined-type
+  "var a: undefined;")
+
+(js2-deftest-parse flow-literal-this-type
+  "var a: this;")
+
+(js2-deftest-parse flow-literal-void-type
+  "var a: void;")
+
+(js2-deftest-parse flow-literal-star-type
+  "var a: *;")
+
+;; Generic Type
+
+(js2-deftest-parse flow-generic-type
+  "var a: a;")
+
+(js2-deftest-parse flow-generic-member-type
+  "var a: a.b;")
+
+(js2-deftest-parse flow-generic-member-type-no-closed
+  "var a: a.b.;"
+  :syntax-error ".")
+
+(js2-deftest-parse flow-generic-param-type
+  "var a: a<b>;")
+
+(js2-deftest-parse flow-generic-param-type-1
+  "var a: a<>;")
+
+(js2-deftest-parse flow-generic-params-type
+  "var a: a<b, c>;")
+
+;; (js2-deftest-parse flow-generic-params-nested-type
+;;   "var a: a<b, c<d>>;")
+
+;; (js2-deftest-parse flow-generic-params-nested-type-2
+;;   "var a: a<b, c<d>, e>;")
+
+;; (js2-deftest-parse flow-generic-params-nested-type-3
+;;   "var a: a<b, c<d, e<f>>>;")
+
+;; (js2-deftest-parse flow-generic-params-nested-type-4
+;;   "var a: a<b, c,>;")
+
+;; (js2-deftest-parse flow-generic-member-params-type
+;;   "var a: a.b<c, d>;")
+
+;; (js2-deftest-parse flow-generic-params-decl-type
+;;   "var a: <b>(b)=>b;")
+
+;; (js2-deftest-parse flow-generic-params-decl-type-type
+;;   "var a: <b: c>(b) => b;")
+
+;; (js2-deftest-parse flow-generic-params-decl-init-type
+;;   "var a: <b = 42>(b) => b;")
+
+;; (js2-deftest-parse flow-generic-params-decl-type-init-type
+;;   "var a: <b: c = 42>(b) => b;")
+
+;; Maybe type
+
+(js2-deftest-parse flow-maybe-type
+  "var a: ?number;")
+
+(js2-deftest-parse flow-maybe-maybe-type
+  "var a: ??number;")
+
+;; Array type
+
+(js2-deftest-parse flow-array-type
+  "var a: number[];")
+
+(js2-deftest-parse flow-array-array-type
+  "var a: number[][];")
+
+(js2-deftest-parse flow-array-type-no-closed
+  "var a: number[;"
+  :syntax-error "[")
+
+;; Tuple type
+;; Object type
+;; Function type
+;; Intersection type
+;; Union type

@@ -20,4 +20,7 @@ clean:
 test:
 	${EMACS} $(BATCHFLAGS) -L . -l js2-mode.el -l js2-old-indent.el -l tests/parser.el \
 	  -l tests/indent.el -l tests/externs.el -l tests/json-path.el -l tests/consume.el \
-	  -l tests/navigation.el -f ert-run-tests-batch-and-exit
+	  -l tests/navigation.el -l tests/flow.el -f ert-run-tests-batch-and-exit
+flow:
+	${EMACS} $(BATCHFLAGS) -L . -l js2-mode.el -l js2-old-indent.el -l tests/flow.el \
+	  -f ert-run-tests-batch-and-exit
