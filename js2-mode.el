@@ -4557,38 +4557,54 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
                                                                  (pos js2-ts-cursor)
                                                                  len
                                                                  params
-                                                                 empty-p)))
+                                                                 trailing)))
   "AST node for type params node."
   params
-  empty-p)  ; e.g. a<>
+  trailing)  ; e.g. a<,>
 
 (js2--struct-put 'js2-type-params-node 'js2-visitor 'js2-visit-none)
 (js2--struct-put 'js2-type-params-node 'js2-printer 'js2-print-type-params-node)
 
 (defun js2-print-type-params-node (n i)
-  (let ((params (js2-type-params-node-params n)))
+  (let ((params (js2-type-params-node-params n))
+        (trailing (js2-type-params-node-trailing n)))
     (insert "<")
     (when params
       (js2-print-ast (car params) 0)
       (dolist (param (cdr params))
         (insert ", ")
         (js2-print-ast param 0)))
+    (when trailing
+      (insert ","))
     (insert ">")))
 
 (cl-defstruct (js2-union-type-node
                (:include js2-node)
                (:constructor make-js2-union-type-node (&key (type js2-BITOR)
                                                             (pos js2-ts-cursor)
-                                                            len types)))
+                                                            len
+                                                            types
+                                                            begin-p)))
   "AST node for union type."
-  types)  ; union types
+  types
+  begin-p)
 
 (js2--struct-put 'js2-union-type-node 'js2-visitor 'js2-visit-none)
 (js2--struct-put 'js2-union-type-node 'js2-printer 'js2-print-union-type-node)
 
 (defun js2-print-union-type-node (n i)
-  (insert ("| ")
-          ))
+  (let ((begin-p (js2-union-type-node-begin-p n))
+        (types (js2-union-type-node-types n)))
+    (when begin-p
+      (insert "|"))
+    (when types
+      ;; (js2-print-ast (car types) 0)
+      (dolist (type types)
+        (js2-print-ast type 0)
+        (insert "| ")
+        )
+      )
+    ))
 
 (cl-defstruct (js2-intersection-type-node
                (:include js2-node)
@@ -4616,6 +4632,33 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
 
 (js2--struct-put 'js2-function-type-node 'js2-visitor 'js2-visit-none)
 (js2--struct-put 'js2-function-type-node 'js2-printer 'js2-print-function-type-node)
+
+(cl-defstruct (js2-tuple-type-node
+               (:include js2-node)
+               (:constructor make-js2-tuple-type-node (&key (type js2-BITOR)
+                                                            (pos js2-ts-cursor)
+                                                            len
+                                                            types
+                                                            trailing)))
+  "AST node for tuple type."
+  types
+  trailing)
+
+(js2--struct-put 'js2-tuple-type-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-tuple-type-node 'js2-printer 'js2-print-tuple-type-node)
+
+(defun js2-print-tuple-type-node (n i)
+  (let ((trailing (js2-tuple-type-node-trailing n))
+        (types (js2-tuple-type-node-types n)))
+    (insert "[")
+    (when types
+      (js2-print-ast (car types) 0)
+      (dolist (type (cdr types))
+        (insert ", ")
+        (js2-print-ast type 0)))
+    (when trailing
+      (insert ","))
+    (insert "]")))
 
 (defun js2-print-function-type-node (n i)
   (insert ("& ")
@@ -4829,8 +4872,9 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
 (js2--struct-put 'js2-generic-type-node 'js2-printer 'js2-print-generic-type-node)
 
 (defun js2-print-generic-type-node (n i)
-  (js2-print-ast (js2-generic-type-node-name n) 0)
-  (let ((params (js2-generic-type-node-params n)))
+  (let ((name (js2-generic-type-node-name n))
+        (params (js2-generic-type-node-params n)))
+    (js2-print-ast (js2-generic-type-node-name n) 0)
     (when params
       (js2-print-ast params 0))))
 
@@ -6491,17 +6535,20 @@ its relevant fields and puts it into `js2-ti-tokens'."
                                  js2-LE
                                (throw 'return js2-LT))))
                           (?>
-                           (if (js2-match-char ?>)
-                               (if (js2-match-char ?>)
+                           ;; TODO implement tokens scanner of type annotation
+                           (if js2-in-type
+                               (throw 'return js2-GT)
+                             (if (js2-match-char ?>)
+                                 (if (js2-match-char ?>)
+                                     (if (js2-match-char ?=)
+                                         js2-ASSIGN_URSH
+                                       js2-URSH)
                                    (if (js2-match-char ?=)
-                                       js2-ASSIGN_URSH
-                                     js2-URSH)
-                                 (if (js2-match-char ?=)
-                                     js2-ASSIGN_RSH
-                                   js2-RSH))
-                             (if (js2-match-char ?=)
-                                 js2-GE
-                               (throw 'return js2-GT))))
+                                       js2-ASSIGN_RSH
+                                     js2-RSH))
+                               (if (js2-match-char ?=)
+                                   js2-GE
+                                 (throw 'return js2-GT)))))
                           (?*
                            (if (js2-match-char ?=)
                                js2-ASSIGN_MUL
@@ -11511,12 +11558,16 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
 
 ;;; Typed supports. Current support flow, the typescript support maybe coming soon.
 
-(defvar js2-typed-syntax 'flow "js2 type syntax, flow or typescript.")
+(defvar js2-typed-syntax 'flow "js2 type syntax, flow or typescript(not support).")
+(js2-deflocal js2-in-type nil "state for scan tokens.")
 
 (defun js2-parse-type-annotation ()
   "Parse type annotation."
   (when (js2-match-token js2-COLON)
-    (js2-create-type-node)))
+    (setq js2-in-type t)
+    (prog1
+      (js2-create-type-node)
+      (setq js2-in-type nil))))
 
 (defun js2-create-type-node ()
   "Create type annoation node."
@@ -11576,6 +11627,9 @@ var v: a & b"
   (let ((tt (js2-get-token))
         (beg (js2-current-token-beg)))
     (cond
+     ;; tuple type, e.g. [a, b]
+     ((= tt js2-LB)
+      (js2-parse-tuple-type))
      ;; primitive type
      ((= tt js2-NAME)
       (js2-parse-primitive-type))
@@ -11678,21 +11732,58 @@ var v: a & b"
   "Parse type params, e.g. <a, b>"
   (let ((pos (js2-current-token-beg))
         (continue t)
-        params)
-    (when (js2-match-token js2-LT)
-      (if (js2-match-token js2-GT)
-          (make-js2-type-params-node :pos pos
-                                     :len (- (js2-current-token-end) pos))
+        params trailing)
+    (if (not (js2-match-token js2-LT))
+        (progn
+          (js2-report-error "msg.syntax")
+          params)
+      (if (js2-match-token js2-COMMA)              ; match a<,
+          ;; match a<, syntax error
+          (progn
+            (js2-report-error "msg.syntax")
+            params)
+        (if (js2-match-token js2-GT)               ; match a<>
+            (make-js2-type-params-node :pos pos
+                                       :len (- (js2-current-token-end) pos))
+          (while continue
+            ;; TODO decl-p, in type params state.
+            (push (js2-parse-type) params)
+            (if (js2-match-token js2-COMMA)
+                (when (js2-match-token js2-GT)     ; match a<b,>
+                  (setq continue nil
+                        trailing t))
+              (setq continue nil)
+              (if (not (js2-match-token js2-GT))
+                (js2-report-error "msg.syntax")))) ; end loop
+          (make-js2-type-params-node :params (nreverse params)
+                                     :pos pos
+                                     :len (- (js2-current-token-end) pos)
+                                     :trailing trailing))))))
+(defun js2-parse-tuple-type ()
+  "Parse tuple type, e.g. var v: [a, b]"
+  (let ((pos (js2-current-token-beg))
+        (continue t)
+        types trailing)
+    (if (js2-match-token js2-RB)                 ; match a[]
+        (make-js2-tuple-type-node :pos pos
+                                  :len (- (js2-current-token-end) pos))
+      (if (js2-match-token js2-COMMA)            ; match a[,
+          (progn
+            (js2-report-error "msg.syntax")
+            types)
         (while continue
-          ;; TODO decl-p, in type params state.
-          (push (js2-parse-type) params)
-          (unless (js2-match-token js2-COMMA)
+          (push (js2-parse-type) types)
+          (if (js2-match-token js2-COMMA)
+              (when (js2-match-token js2-RB)     ; match a[b,]
+                (setq continue nil
+                      trailing t))
             (setq continue nil)
-            (unless (js2-match-token js2-GT)
-              (js2-report-error "msg.syntax"))))
-        (make-js2-type-params-node :params (nreverse params)
-                                   :pos pos
-                                   :len (- (js2-current-token-end) pos))))))
+            (unless (js2-match-token js2-RB)
+              (js2-report-error "msg.syntax")))) ; end loop
+        (make-js2-tuple-type-node :pos pos
+                                  :len (- (js2-current-token-end) pos)
+                                  :types (nreverse types)
+                                  :trailing trailing)))))
 
 ;;; Use AST to extract semantic information
 

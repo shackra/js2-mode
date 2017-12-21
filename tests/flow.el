@@ -188,20 +188,41 @@ the test."
 (js2-deftest-parse flow-generic-params-type
   "var a: a<b, c>;")
 
-;; (js2-deftest-parse flow-generic-params-nested-type
-;;   "var a: a<b, c<d>>;")
+(js2-deftest-parse flow-generic-params-type-1
+  "var a: a<b, c,>;")
 
-;; (js2-deftest-parse flow-generic-params-nested-type-2
-;;   "var a: a<b, c<d>, e>;")
+(js2-deftest-parse flow-generic-params-type-2
+  "var a: a<;"
+  :syntax-error "<")
 
-;; (js2-deftest-parse flow-generic-params-nested-type-3
-;;   "var a: a<b, c<d, e<f>>>;")
+(js2-deftest-parse flow-generic-params-type-3
+  "var a: a<,;"
+  :syntax-error ",")
 
-;; (js2-deftest-parse flow-generic-params-nested-type-4
-;;   "var a: a<b, c,>;")
+(js2-deftest-parse flow-generic-params-type-4
+  "var a: a<b;"
+  :syntax-error "b")
 
-;; (js2-deftest-parse flow-generic-member-params-type
-;;   "var a: a.b<c, d>;")
+(js2-deftest-parse flow-generic-params-type-5
+  "var a: a<b,;"
+  :syntax-error ",")
+
+(js2-deftest-parse flow-generic-params-type-6
+  "var a: a<,>;"
+  :syntax-error ","
+  :errors-count 3)
+
+(js2-deftest-parse flow-generic-params-nested-type
+  "var a: a<b, c<d>>;")
+
+(js2-deftest-parse flow-generic-params-nested-type-2
+  "var a: a<b, c<d>, e>;")
+
+(js2-deftest-parse flow-generic-params-nested-type-3
+  "var a: a<b, c<d, e<f>>>;")
+
+(js2-deftest-parse flow-generic-member-params-type
+  "var a: a.b<c, d>;")
 
 ;; (js2-deftest-parse flow-generic-params-decl-type
 ;;   "var a: <b>(b)=>b;")
@@ -236,6 +257,42 @@ the test."
   :syntax-error "[")
 
 ;; Tuple type
+
+(js2-deftest-parse flow-tuple-type
+  "var a: [a];")
+
+(js2-deftest-parse flow-tuple-multi-type
+  "var a: [a, b];")
+
+(js2-deftest-parse flow-tuple-empty-type
+  "var a: [];")
+
+(js2-deftest-parse flow-tuple-array-type
+  "var a: [][];")
+
+(js2-deftest-parse flow-tuple-tuple-type
+  "var a: [[]];")
+
+(js2-deftest-parse flow-tuple-type-no-closed
+  "var a: [;"
+  :syntax-error "[")
+
+(js2-deftest-parse flow-tuple-type-no-closed-2
+  "var a: [b;"
+  :syntax-error "b")
+
+(js2-deftest-parse flow-tuple-type-no-closed-3
+  "var a: [b,;"
+  :syntax-error ",")
+
+(js2-deftest-parse flow-tuple-type-trailing-comma
+  "var a: [,];"
+  :syntax-error ","
+  :errors-count 3)
+
+(js2-deftest-parse flow-tuple-type-trailing-comma-2
+  "var a: [b,];")
+
 ;; Object type
 ;; Function type
 ;; Intersection type
