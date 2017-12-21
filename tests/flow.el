@@ -293,7 +293,90 @@ the test."
 (js2-deftest-parse flow-tuple-type-trailing-comma-2
   "var a: [b,];")
 
-;; Object type
 ;; Function type
+
+(js2-deftest-parse flow-function-type
+  "var a: b => c;")
+
+(js2-deftest-parse flow-function-type-maybe
+  "var a: ?b => c;")
+
+(js2-deftest-parse flow-function-type-chain
+  "var a: b => c => d;")
+
+(js2-deftest-parse flow-function-type-param
+  "var a: (b) => c;")
+
+(js2-deftest-parse flow-function-type-param-1
+  "var a: (b);")
+
+(js2-deftest-parse flow-function-type-param-1-no-closed
+  "var a: (;"
+  :syntax-error "(")
+
+(js2-deftest-parse flow-function-type-param-free
+  "var a: b => c;")
+
+(js2-deftest-parse flow-function-type-params
+  "var a: (b, c) => d;")
+
+(js2-deftest-parse flow-function-type-params-trailing-comma
+  "var a: (b,) => c;")
+
+(js2-deftest-parse flow-function-type-params-no-closed
+  "var a: (b => c;"
+  :syntax-error "c")
+
+(js2-deftest-parse flow-function-type-params-no-closed-2
+  "var a: (b, => c;"
+  :syntax-error "=>"
+  :errors-count 2)
+
+(js2-deftest-parse flow-function-type-params-named
+  "var a: (b: c) => d;")
+
+(js2-deftest-parse flow-function-type-params-named-2
+  "var a: (b: c, d) => e;")
+
+(js2-deftest-parse flow-function-type-params-optional
+  "var a: (b?: c) => d;")
+
+(js2-deftest-parse flow-function-type-params-optional-2
+  "var a: (b?) => d;"
+  :syntax-error "?")
+
+;; (js2-deftest-parse flow-function-type-params-rest
+;;   "var a: (...b) => c;")
+
+;; (js2-deftest-parse flow-function-type-params-rest-2
+;;   "var a: (...b: c) => d;")
+
+;; (js2-deftest-parse flow-function-type-params-rest-3
+;;   "var a: (b, ...c) => d;")
+
+;; (js2-deftest-parse flow-function-type-params-rest-4
+;;   "var a: (b?: c, ...d) => e;")
+
+;; (js2-deftest-parse flow-function-type-params-rest-5
+;;   "var a: (...b, c) => d;")
+
+;; (js2-deftest-parse flow-function-type-params-type-params
+;;   "var a: <b>(c) => d;")
+
+;; (js2-deftest-parse flow-function-type-params-type-params
+;;   "var a: <b>c => d;")
+
+;; Object type
+;; Typeof type
 ;; Intersection type
 ;; Union type
+;; Variables
+;; Functions
+;; Classes
+;; Interface
+;; Type aliases
+;; Opaque type aliases
+;; Modules
+;; Type casing expr
+;; Declares
+;; Utilities
