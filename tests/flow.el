@@ -224,17 +224,80 @@ the test."
 (js2-deftest-parse flow-generic-member-params-type
   "var a: a.b<c, d>;")
 
-;; (js2-deftest-parse flow-generic-params-decl-type
-;;   "var a: <b>(b)=>b;")
+(js2-deftest-parse flow-generic-params-decl-type
+  "var a: <b>(c) => d;")
 
-;; (js2-deftest-parse flow-generic-params-decl-type-type
-;;   "var a: <b: c>(b) => b;")
+(js2-deftest-parse flow-generic-params-decl-type-2
+  "var a: <b: c>(d) => e;")
 
-;; (js2-deftest-parse flow-generic-params-decl-init-type
-;;   "var a: <b = 42>(b) => b;")
+(js2-deftest-parse flow-generic-params-decl-type-3
+  "var a: <b = 42>(c) => d;")
 
-;; (js2-deftest-parse flow-generic-params-decl-type-init-type
-;;   "var a: <b: c = 42>(b) => b;")
+(js2-deftest-parse flow-generic-params-decl-type-4
+  "var a: <b: c = 42>(d) => e;")
+
+(js2-deftest-parse flow-generic-params-decl-type-5
+  "var a: <b: c = d, e>(f) => g;")
+
+(js2-deftest-parse flow-generic-params-decl-type-6
+  "var a: <b: c = d, e: f>(g) => h;")
+
+(js2-deftest-parse flow-generic-params-decl-type-7
+  "var a: <b, c: d<e>>(f) => g;")
+
+(js2-deftest-parse flow-generic-params-decl-type-8
+  "var a: <b<c>>(d) => e;")
+
+(js2-deftest-parse flow-generic-params-decl-type-no-closed
+  "var a: <b(c) => d;"
+  :syntax-error "b")
+
+(js2-deftest-parse flow-generic-params-decl-type-no-closed-2
+  "var a: <,(b) => c;"
+  :syntax-error ",")
+
+(js2-deftest-parse flow-generic-params-decl-type-no-closed-3
+  "var a: <,b(c) => d;"
+  :syntax-error ","
+  :errors-count 4)
+
+(js2-deftest-parse flow-generic-params-decl-type-no-closed-4
+  "var a: <,>(b) => c;"
+  :syntax-error ","
+  :errors-count 6)
+
+(js2-deftest-parse flow-generic-params-decl-type-no-closed-5
+  "var a: <b:>(c) => d;"
+  :syntax-error ":")
+
+(js2-deftest-parse flow-generic-params-decl-type-no-closed-6
+  "var a: <b = >(c) => d;"
+  :syntax-error "=")
+
+(js2-deftest-parse flow-generic-params-decl-type-no-closed-7
+  "var a: <b: = >(c) => d;"
+  :syntax-error ":"
+  :errors-count 2)
+
+(js2-deftest-parse flow-generic-params-decl-type-no-closed-8
+  "var a: <b: c = >(d) => e;"
+  :syntax-error "=")
+
+(js2-deftest-parse flow-generic-params-decl-type-no-closed-9
+  "var a: <b: c = d<>(c) => d;"
+  :syntax-error ">")
+
+(js2-deftest-parse flow-generic-params-decl-type-no-closed-10
+  "var a: <b: c = d<e>(f) => g;"
+  :syntax-error ">")
+
+(js2-deftest-parse flow-generic-params-decl-type-no-closed-11
+  "var a: <b: c = d<e(f) => g;"
+  :syntax-error "e"
+  :errors-count 2)
+
+;; (js2-deftest-parse flow-generic-params-decl-type-not-decl
+;;   "var a: <b: c = d<e: f>>(g) => h;")
 
 ;; Maybe type
 
@@ -310,6 +373,15 @@ the test."
 (js2-deftest-parse flow-function-type-param-1
   "var a: (b);")
 
+(js2-deftest-parse flow-function-type-param-tuple-type
+  "var a: [] => c;")
+
+;; (js2-deftest-parse flow-function-type-param-object-type
+;;   "var a: {} => c;")
+
+(js2-deftest-parse flow-function-type-param-function-type
+  "var a: (b => c) => d;")
+
 (js2-deftest-parse flow-function-type-param-1-no-closed
   "var a: (;"
   :syntax-error "(")
@@ -338,6 +410,14 @@ the test."
 (js2-deftest-parse flow-function-type-params-named-2
   "var a: (b: c, d) => e;")
 
+(js2-deftest-parse flow-function-type-params-named-no-closed
+  "var a: (b:) => d;"
+  :syntax-error ":")
+
+(js2-deftest-parse flow-function-type-params-named-no-closed-2
+  "var a: (b:,) => d;"
+  :syntax-error ":")
+
 (js2-deftest-parse flow-function-type-params-optional
   "var a: (b?: c) => d;")
 
@@ -345,26 +425,30 @@ the test."
   "var a: (b?) => d;"
   :syntax-error "?")
 
-;; (js2-deftest-parse flow-function-type-params-rest
-;;   "var a: (...b) => c;")
+(js2-deftest-parse flow-function-type-params-rest
+  "var a: (...b) => c;")
 
-;; (js2-deftest-parse flow-function-type-params-rest-2
-;;   "var a: (...b: c) => d;")
+(js2-deftest-parse flow-function-type-params-rest-2
+  "var a: (...b: c) => d;")
 
-;; (js2-deftest-parse flow-function-type-params-rest-3
-;;   "var a: (b, ...c) => d;")
+(js2-deftest-parse flow-function-type-params-rest-3
+  "var a: (b, ...c) => d;")
 
-;; (js2-deftest-parse flow-function-type-params-rest-4
-;;   "var a: (b?: c, ...d) => e;")
+(js2-deftest-parse flow-function-type-params-rest-4
+  "var a: (b?: c, ...d) => e;")
 
-;; (js2-deftest-parse flow-function-type-params-rest-5
-;;   "var a: (...b, c) => d;")
+(js2-deftest-parse flow-function-type-params-rest-5
+  "var a: (...b, c) => d;"
+  :syntax-error "b"
+  :errors-count 5)
 
-;; (js2-deftest-parse flow-function-type-params-type-params
-;;   "var a: <b>(c) => d;")
+(js2-deftest-parse flow-function-type-params-type-params
+  "var a: <b>(c) => d;")
 
-;; (js2-deftest-parse flow-function-type-params-type-params
-;;   "var a: <b>c => d;")
+(js2-deftest-parse flow-function-type-params-type-params
+  "var a: <b>c => d;"
+  :syntax-error ">"
+  :errors-count 2)
 
 ;; Object type
 ;; Typeof type

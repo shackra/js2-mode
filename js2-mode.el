@@ -4588,6 +4588,37 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
       (insert ","))
     (insert ">")))
 
+(cl-defstruct (js2-type-param-node
+               (:include js2-node)
+               (:constructor make-js2-type-param-node (&key (type js2-LT)
+                                                            (pos js2-ts-cursor)
+                                                            len
+                                                            name
+                                                            decl-p
+                                                            type-annotation
+                                                            init)))
+  "AST node for type params param."
+  name
+  decl-p
+  type-annotation
+  init)
+
+(js2--struct-put 'js2-type-param-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-type-param-node 'js2-printer 'js2-print-type-param-node)
+
+(defun js2-print-type-param-node (n i)
+  (let ((name (js2-type-param-node-name n))
+        (decl-p (js2-type-param-node-decl-p n))
+        (ta (js2-type-param-node-type-annotation n))
+        (init (js2-type-param-node-init n)))
+    (js2-print-ast name 0)
+    (when decl-p
+      (when ta
+        (js2-print-ast ta 0))
+      (when init
+        (insert " = ")
+        (js2-print-ast init 0)))))
+
 (cl-defstruct (js2-union-type-node
                (:include js2-node)
                (:constructor make-js2-union-type-node (&key (type js2-BITOR)
@@ -4656,8 +4687,12 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
 (defun js2-print-function-type-node (n i)
   (let ((free-p (js2-function-type-node-free-p n))
         (params (js2-function-type-node-params n))
+        (rest (js2-function-type-node-rest n))
+        (type-params (js2-function-type-node-type-params n))
         (return-type (js2-function-type-node-return-type n))
         (trailing (js2-function-type-node-trailing n)))
+    (when type-params
+      (js2-print-ast type-params 0))
     (when (not free-p)
       (insert "("))
     (when params
@@ -4667,6 +4702,12 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
         (js2-print-ast param 0)))
     (when trailing
       (insert ","))
+    (when rest
+      (when params
+        (insert ", "))
+      (insert "...")
+      (js2-print-ast rest 0)
+      )
     (when (not free-p)
       (insert ")"))
     (insert " => ")
@@ -11716,6 +11757,15 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
      ;; function type, e.g. (a) => b
      ((= tt js2-LP)
       (js2-parse-function-type))
+     ((= tt js2-LT)
+      (let (type-params node)
+        (js2-unget-token)
+        (setq type-params (js2-parse-type-params t))
+        (if (not (js2-match-token js2-LP))
+            (js2-report-error "msg.syntax")
+          (setq node (js2-parse-function-type))
+          (setf (js2-function-type-node-type-params node) type-params)
+          node)))
      ;; primitive type
      ((= tt js2-NAME)
       (js2-parse-primitive-type))
@@ -11799,9 +11849,6 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
         node member)
     (when (js2-match-token js2-NAME)
       (setq node (js2-parse-name (js2-current-token)))
-      ;; (when decl-p
-      ;;   (js2-define-symbol
-      ;;    js2-LET (js2-name-node-name node) node t))
       (while (and continue (js2-match-token js2-DOT))
         (if (= (js2-peek-token) js2-NAME)
             (setq member (js2-parse-generic-type-name))
@@ -11833,7 +11880,7 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
                                        :len (- (js2-current-token-end) pos))
           (while continue
             ;; TODO decl-p, in type params state.
-            (push (js2-parse-type) params)
+            (push (js2-parse-type-param decl-p) params)
             (if (js2-match-token js2-COMMA)
                 (when (js2-match-token js2-GT)     ; match a<b,>
                   (setq continue nil
@@ -11841,10 +11888,39 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
               (setq continue nil)
               (if (not (js2-match-token js2-GT))
                 (js2-report-error "msg.syntax")))) ; end loop
-          (make-js2-type-params-node :params (nreverse params)
-                                     :pos pos
+          (make-js2-type-params-node :pos pos
                                      :len (- (js2-current-token-end) pos)
+                                     :params (nreverse params)
                                      :trailing trailing))))))
+
+(defun js2-parse-type-param (&optional param-decl-p)
+  "Parse type param, e.g. <a: b = c>"
+  (let ((pos (js2-current-token-beg))
+        name type-annotation init)
+    (setq name (js2-create-type-node t))
+    (if (not param-decl-p)
+        (make-js2-type-param-node :pos pos
+                                  :len (- (js2-current-token-end) pos)
+                                  :name name)
+      (when (js2-match-token js2-COLON)
+        (let ((next-tt (js2-peek-token)))
+          (if (or (= next-tt js2-COMMA)   ; match <a:,
+                  (= next-tt js2-ASSIGN)  ; match <a:=
+                  (= next-tt js2-GT))     ; match <a:>
+              (js2-report-error "msg.syntax")
+            (setq type-annotation (js2-create-type-node)))))
+      (when (js2-match-token js2-ASSIGN)
+        (if (= (js2-peek-token) js2-GT)   ; match <a = >
+            (js2-report-error "msg.syntax")
+          ;; TODO (Rabbit) <a = b<c: d>> should throw error.
+          (setq init (js2-create-type-node t))))
+      (make-js2-type-param-node :pos pos
+                                :len (- (js2-current-token-end) pos)
+                                :name name
+                                :decl-p param-decl-p
+                                :type-annotation type-annotation
+                                :init init))))
+
 (defun js2-parse-tuple-type ()
   "Parse tuple type, e.g. var v: [a, b]"
   (let ((pos (js2-current-token-beg))
@@ -11888,31 +11964,45 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
       (if (js2-match-token js2-COMMA)                   ; match (,
           (prog1 types
             (js2-report-error "msg.syntax"))
-        (while continue
-          (push (js2-parse-function-type-param fst-p) params)
-          (setq fst-p nil)
-          (if (js2-match-token js2-COMMA)               ; match (a,
-              (let ((next-tt (js2-get-token)))
-                (cond
-                 ((= next-tt js2-RP)                    ; match (a,)
-                  (setq continue nil
-                        trailing t))
-                 ((= next-tt js2-ARROW)                 ; match (a, =>
-                  (setq continue nil)
-                  (js2-report-error "msg.syntax"))
-                 (t
-                  (js2-unget-token))))
-            (setq continue nil)
-            (unless (js2-match-token js2-RP)
-                (js2-report-error "msg.syntax"))))
+        (if (js2-match-token js2-TRIPLEDOT)             ; match (...a
+            (progn
+              (setq rest (js2-parse-function-type-param))
+              (unless (js2-match-token js2-RP)
+                (js2-report-error "msg.syntax")))
+          (while continue
+            (push (js2-parse-function-type-param fst-p) params)
+            (setq fst-p nil)
+            (if (js2-match-token js2-COMMA)             ; match (a,
+                (let ((next-tt (js2-get-token)))
+                  (cond
+                   ((= next-tt js2-RP)                  ; match (a,)
+                    (setq continue nil
+                          trailing t))
+                   ((= next-tt js2-ARROW)               ; match (a, =>
+                    (setq continue nil)
+                    (js2-report-error "msg.syntax"))
+                   ((= next-tt js2-TRIPLEDOT)           ; match (a, ...a
+                    (setq rest (js2-parse-function-type-param)
+                          trailing nil
+                          continue nil)
+                    (unless (js2-match-token js2-RP)
+                      (js2-report-error "msg.syntax")))
+                   (t
+                    (js2-unget-token))))
+              (setq continue nil)
+              (unless (js2-match-token js2-RP)
+                (js2-report-error "msg.syntax")))))
         (if (not (js2-match-token js2-ARROW))
-            (let ((node (caar params)))                 ; match (a) only, not a function type
-              (setf (js2-type-annotation-node-parents-p node) t)
-              node)
-          (let ((return-type (js2-create-type-node t))) ; match (...) =>
-            (setq params (reverse params))
-            (when (listp (car params))
-              (setcar params (car (cdar params))))
+            (if (not params)                            ; match (...a, report error
+                (js2-report-error "msg.syntax")
+              (let ((node (caar params)))               ; match (a) only, not a function type
+                (setf (js2-type-annotation-node-parents-p node) t)
+                node))
+          (let ((return-type (js2-create-type-node t))) ; match () =>
+            (when params
+              (setq params (reverse params))
+              (when (listp (car params))
+                (setcar params (car (cdar params)))))
             (make-js2-function-type-node :pos pos
                                          :len (- (js2-current-token-end) pos)
                                          :return-type return-type
@@ -11920,17 +12010,16 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
                                          :rest rest
                                          :trailing trailing)))))))
 
-(defun js2-parse-function-type-param (fst-p)
+(defun js2-parse-function-type-param (&optional fst-p)
   "Parse function type param."
   (let ((pos (js2-current-token-beg))
         (tt (js2-get-token))
         (next-tt (js2-peek-token))
-        optional type-annotation
-        name
+        optional type-annotation name
         node)
     (if (not (or (= next-tt js2-COLON)
                  (= next-tt js2-HOOK)))
-        (progn                          ; no named, only the type annotation
+        (progn                                 ; not named, only the type annotation
           (js2-unget-token)
           (setq type-annotation (js2-create-type-node t))
           (setq node (make-js2-function-param-type-node :pos pos
@@ -11940,19 +12029,21 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
               (list type-annotation
                     node)
             node))
-      ;; TODO supports [] and {} and ...
       (js2-unget-token)
       (setq name (js2-create-type-node t))
-      (when (js2-match-token js2-HOOK)  ; match a?
+      (when (js2-match-token js2-HOOK)         ; match a?
         (setq optional t))
       (if (not (js2-match-token js2-COLON))
           (js2-report-error "msg.syntax")
-        (setq type-annotation (js2-create-type-node))
-        (make-js2-function-param-type-node :pos pos
-                                           :len (- (js2-current-token-end) pos)
-                                           :name name
-                                           :type-annotation type-annotation
-                                           :optional optional)))))
+        (if (or (= (js2-peek-token) js2-COMMA) ; match (a:,
+                (= (js2-peek-token) js2-RP))   ; match (a:)
+            (js2-report-error "msg.syntax")
+          (setq type-annotation (js2-create-type-node))
+          (make-js2-function-param-type-node :pos pos
+                                             :len (- (js2-current-token-end) pos)
+                                             :name name
+                                             :type-annotation type-annotation
+                                             :optional optional))))))
 
 ;;; Use AST to extract semantic information
 
