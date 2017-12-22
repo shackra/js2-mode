@@ -4791,6 +4791,7 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
                                                                   value
                                                                   spread-p
                                                                   indexed-p
+                                                                  prop-name
                                                                   call-p)))
   "AST node for object prop type."
   optional
@@ -4799,6 +4800,7 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
   value
   spread-p
   indexed-p
+  prop-name
   call-p)
 
 (js2--struct-put 'js2-object-prop-type-node 'js2-visitor 'js2-visit-none)
@@ -4808,17 +4810,31 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
   (let ((key (js2-object-prop-type-node-key n))
         (value (js2-object-prop-type-node-value n))
         (optional (js2-object-prop-type-node-optional n))
-        (kind (js2-object-prop-type-node-kind n)))
-    (when kind
-      (cond
-       ((= kind js2-ADD)
-        (insert "+"))
-       ((= kind js2-SUB)
-        (insert "-"))))
-    (js2-print-ast key 0)
-    (when optional
-      (insert "?"))
-    (js2-print-ast value 0)))
+        (kind (js2-object-prop-type-node-kind n))
+        (call-p (js2-object-prop-type-node-call-p n))
+        (indexed-p (js2-object-prop-type-node-indexed-p n))
+        (prop-name (js2-object-prop-type-node-prop-name n)))
+    (if call-p
+        (js2-print-ast value 0)
+      (when kind
+        (if (numberp kind)
+            (cond
+             ((= kind js2-ADD)
+              (insert "+"))
+             ((= kind js2-SUB)
+              (insert "-")))
+          (insert kind)
+          (insert " ")))
+      (when indexed-p
+        (insert "["))
+      (when prop-name
+        (js2-print-ast prop-name 0))
+      (js2-print-ast key 0)
+      (when indexed-p
+        (insert "]"))
+      (when optional
+        (insert "?"))
+      (js2-print-ast value 0))))
 
 (cl-defstruct (js2-tuple-type-node
                (:include js2-node)
@@ -12092,40 +12108,69 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
                                      :properties (nreverse properties)
                                      :trailing trailing))))))
 
-(defun js2-parse-object-prop-type (&optional kind)
+(defun js2-parse-object-prop-type (&optional kind indexed-p prop-name key)
   "Parse prop type, used for object type, type alias and interface."
   (let ((pos (js2-current-token-beg))
         (tt (js2-get-token))
         (name (js2-current-token-string))
-        optional rest call-p key value spread-p indexed-p
-        node)
+        optional rest call-p value spread-p
+        type-params)                    ; for call prop type params
     (cond
      ((= tt js2-TRIPLEDOT)              ; match {...a}
       )
      ((or (= tt js2-LP)                 ; match {(): a} or {<T>(): a}
           (= tt js2-LT))
-      )
+      (when (= tt js2-LT)
+        (js2-unget-token)
+        (setq type-params (js2-parse-type-params t))
+        (when (not (js2-match-token js2-LP))
+          (js2-report-error "msg.syntax")))
+      (setq value (js2-parse-function-type t))
+      (when type-params
+        (setf (js2-function-type-node-type-params value) type-params))
+      (make-js2-object-prop-type-node :pos pos
+                                      :len (- (js2-current-token-end) pos)
+                                      :value value
+                                      :call-p t))
      ((and (= tt js2-NAME)
            (or (string= name "get")
                (string= name "set")))   ; match {get foo(): a} or {set foo(): a}
-      )
+      (if (and kind
+               (or (string= name "get")
+                   (string= name "set")))
+          (js2-report-error "msg.syntax")
+        ;; FIXME: (Rabbit) this kind require a function
+        (js2-parse-object-prop-type name)))
      ((or (= tt js2-ADD)                ; match {+a: b} or {-a: b}
           (= tt js2-SUB))
       (js2-parse-object-prop-type tt))
      ((= tt js2-LB)                     ; match {[a]: b}
-      )
+      (let ((next-tt (js2-get-token))
+            (next-tt2 (js2-peek-token)))
+        (cond
+         ((= next-tt2 js2-RB)           ; match {[a]
+          (js2-unget-token)
+          (setq key (js2-create-type-node t))
+          (js2-parse-object-prop-type kind t prop-name key))
+         ((= next-tt2 js2-COLON)        ; match {[a:
+          (setq prop-name (js2-parse-name (js2-current-token)))
+          (js2-get-token)               ; eat :
+          (setq key (js2-create-type-node))
+          (js2-parse-object-prop-type kind t prop-name key))
+         (t
+          (js2-report-error "msg.syntax")))))
      (t
-      (js2-unget-token)
-      (setq key (js2-create-type-node t))
-      ;; flow not allow optional method in object, e.g. a?() {}
-      ;; but typescript support this syntax
-      (when (js2-match-token js2-HOOK)         ; match a?
-        (setq optional t))
+      (unless indexed-p
+        (js2-unget-token)
+        (setq key (js2-create-type-node t))
+        ;; FIXME: (Rabbit) flow not allow optional method in object, e.g. a?() {}
+        ;; but typescript support this syntax
+        (when (js2-match-token js2-HOOK)  ; match a?
+          (setq optional t)))
       (let ((next-tt (js2-get-token)))
         (cond
          ((= next-tt js2-LP)            ; match a(
-          (setq value (js2-parse-function-type t))
-          (print value))
+          (setq value (js2-parse-function-type t)))
          ((= next-tt js2-COLON)
           (if (or (= (js2-peek-token) js2-COMMA) ; match {a:,
                   (= (js2-peek-token) js2-RP))   ; match {a:}
@@ -12139,8 +12184,9 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
                                         :key key
                                         :value value
                                         :optional optional
-                                        :kind kind))
-      ))))
+                                        :kind kind
+                                        :indexed-p indexed-p
+                                        :prop-name prop-name))))))
 
 (defun js2-parse-function-type (&optional method-p)
   "Parse function type."

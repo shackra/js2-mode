@@ -495,23 +495,28 @@ the test."
 (js2-deftest-parse flow-object-type-prop-method
   "var a: {b(): c};")
 
-;; (js2-deftest-parse flow-object-type-prop-method-getset
-;;   "var a: { get b(): c };")
+(js2-deftest-parse flow-object-type-prop-method-getset
+  "var a: {get b(): c};")
 
-;; ;; (js2-deftest-parse flow-object-type-prop-method-optional
-;; ;;   "var a: { b?(): c };")
+(js2-deftest-parse flow-object-type-prop-method-getset-2
+  "var a: {get set b(): c};"
+  :syntax-error "set"
+  :errors-count 7)
+
+(js2-deftest-parse flow-object-type-prop-method-optional
+  "var a: {b?(): c};")
 
 ;; (js2-deftest-parse flow-object-type-prop-indexed
-;;   "var a: { [b]: c };")
+;;   "var a: {[b]: c};")
 
-;; (js2-deftest-parse flow-object-type-prop-indexed-named
-;;   "var a: { [b: c]: d };")
+(js2-deftest-parse flow-object-type-prop-indexed-named
+  "var a: {[b: c]: d};")
 
-;; (js2-deftest-parse flow-object-type-prop-call
-;;   "var a: { (): b };")
+(js2-deftest-parse flow-object-type-prop-call
+  "var a: {(): b};")
 
-;; (js2-deftest-parse flow-object-type-prop-call-2
-;;   "var a: { <b>(): c };")
+(js2-deftest-parse flow-object-type-prop-call-2
+  "var a: {<b>(): c};")
 
 ;; (js2-deftest-parse flow-object-type-prop-rest
 ;;   "var a: { ...b };")
@@ -519,8 +524,8 @@ the test."
 ;; (js2-deftest-parse flow-object-type-prop-rest-2
 ;;   "var a: { ...b: c };")
 
-;; (js2-deftest-parse flow-object-type-props
-;;   "var a: { b: c, d: e };")
+(js2-deftest-parse flow-object-type-props
+  "var a: {b: c, d: e};")
 
 ;; (js2-deftest-parse flow-object-no-closed
 ;;   "var a: { b:;")
