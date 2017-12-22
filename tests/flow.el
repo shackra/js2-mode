@@ -476,23 +476,24 @@ the test."
 (js2-deftest-parse flow-object-type-prop
   "var a: {b: c};")
 
-;; (js2-deftest-parse flow-object-type-prop-no-value
-;;   "var a: { b };")
+(js2-deftest-parse flow-object-type-prop-no-value
+  "var a: { b };"
+  :syntax-error "b")
 
-;; (js2-deftest-parse flow-object-type-prop-optional
-;;   "var a: { b?: c };")
+(js2-deftest-parse flow-object-type-prop-optional
+  "var a: {b?: c};")
 
-;; (js2-deftest-parse flow-object-type-prop-readonly
-;;   "var a: { +b: c };")
+(js2-deftest-parse flow-object-type-prop-readonly
+  "var a: {+b: c};")
 
-;; (js2-deftest-parse flow-object-type-prop-writeonly
-;;   "var a: { -b: c };")
+(js2-deftest-parse flow-object-type-prop-writeonly
+  "var a: {-b: c};")
 
-;; (js2-deftest-parse flow-object-type-prop-readonly-optional
-;;   "var a: { +b?: c };")
+(js2-deftest-parse flow-object-type-prop-readonly-optional
+  "var a: {+b?: c};")
 
-;; (js2-deftest-parse flow-object-type-prop-method
-;;   "var a: { b(): c };")
+(js2-deftest-parse flow-object-type-prop-method
+  "var a: {b(): c};")
 
 ;; (js2-deftest-parse flow-object-type-prop-method-getset
 ;;   "var a: { get b(): c };")

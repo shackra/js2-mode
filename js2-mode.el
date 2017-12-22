@@ -4681,6 +4681,7 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
                                                                rest
                                                                return-type
                                                                free-p
+                                                               method-p
                                                                trailing)))
   "AST node for function type."
   type-params
@@ -4688,6 +4689,7 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
   rest
   return-type
   free-p
+  method-p
   trailing)
 
 (js2--struct-put 'js2-function-type-node 'js2-visitor 'js2-visit-none)
@@ -4695,6 +4697,7 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
 
 (defun js2-print-function-type-node (n i)
   (let ((free-p (js2-function-type-node-free-p n))
+        (method-p (js2-function-type-node-method-p n))
         (params (js2-function-type-node-params n))
         (rest (js2-function-type-node-rest n))
         (type-params (js2-function-type-node-type-params n))
@@ -4719,7 +4722,9 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
       )
     (when (not free-p)
       (insert ")"))
-    (insert " => ")
+    (if method-p
+        (insert ": ")
+      (insert " => "))
     (js2-print-ast return-type 0)))
 
 (cl-defstruct (js2-function-param-type-node
@@ -4801,8 +4806,18 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
 
 (defun js2-print-object-prop-type-node (n i)
   (let ((key (js2-object-prop-type-node-key n))
-        (value (js2-object-prop-type-node-value n)))
+        (value (js2-object-prop-type-node-value n))
+        (optional (js2-object-prop-type-node-optional n))
+        (kind (js2-object-prop-type-node-kind n)))
+    (when kind
+      (cond
+       ((= kind js2-ADD)
+        (insert "+"))
+       ((= kind js2-SUB)
+        (insert "-"))))
     (js2-print-ast key 0)
+    (when optional
+      (insert "?"))
     (js2-print-ast value 0)))
 
 (cl-defstruct (js2-tuple-type-node
@@ -6650,7 +6665,7 @@ its relevant fields and puts it into `js2-ti-tokens'."
                           (?\]
                            (throw 'return js2-RB))
                           (?{
-                           (if (js2-match-char "|")
+                           (if (js2-match-char ?|)
                                js2-LCB
                              (throw 'return js2-LC)))
                           (?}
@@ -6675,7 +6690,7 @@ its relevant fields and puts it into `js2-ti-tokens'."
                                  js2-DOTQUERY
                                (throw 'return js2-DOT))))
                           (?|
-                           (if js2-match-char ?}
+                           (if (js2-match-char ?})
                              js2-RCB
                              (if (js2-match-char ?|)
                                  (throw 'return js2-OR)
@@ -12034,9 +12049,7 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
         (make-js2-tuple-type-node :pos pos
                                   :len (- (js2-current-token-end) pos))
       (if (js2-match-token js2-COMMA)            ; match a[,
-          (progn
-            (js2-report-error "msg.syntax")
-            types)
+          (js2-report-error "msg.syntax")
         (while continue
           (push (js2-parse-type) types)
           (if (js2-match-token js2-COMMA)
@@ -12054,126 +12067,152 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
 (defun js2-parse-object-type (begin-token)
   "Parse object type, e.g. { a: b }"
   (let ((end-token (if (= begin-token js2-LCB) js2-RCB js2-RC)))
-    (if (js2-match-token end-token)                        ; match {}
+    (if (js2-match-token end-token)                     ; match {}
         (make-js2-object-type-node :pos pos
                                    :len (- (js2-current-token-end) pos))
-      (let ((continue t)                                  ; match {
+      (let ((continue t)                                ; match {
             properties trailing)
-        (if (js2-match-token js2-COMMA)                   ; match {,
-            (prog1 nil
-              (js2-report-error "msg.syntax"))
+        (if (js2-match-token js2-COMMA)                 ; match {,
+            (js2-report-error "msg.syntax")
           ;; parse props
           (while continue
             (let ((prop (js2-parse-object-prop-type)))
-              (if (not prop)                           ; match (;
+              (if (not prop)                            ; match (;
                   (setq continue nil)
                 (push prop properties)))
             (if (js2-match-token js2-COMMA)             ; match {a,
-                (let ((next-tt (js2-get-token)))
-                  (when (js2-match-token end-token)     ; match a{b,}
+                (when (js2-match-token end-token)       ; match a{b,}
                     (setq continue nil
-                          trailing t)))
+                          trailing t))
               (setq continue nil)
               (unless (js2-match-token end-token)
                 (js2-report-error "msg.syntax"))))
-          (print properties)
           (make-js2-object-type-node :pos pos
                                      :len (- (js2-current-token-end) pos)
                                      :properties (nreverse properties)
                                      :trailing trailing))))))
 
-(defun js2-parse-object-prop-type ()
+(defun js2-parse-object-prop-type (&optional kind)
   "Parse prop type, used for object type, type alias and interface."
   (let ((pos (js2-current-token-beg))
-        (tt (js2-peek-token))
+        (tt (js2-get-token))
+        (name (js2-current-token-string))
         optional rest call-p key value spread-p indexed-p
         node)
-    (print (js2-current-token))
-    (setq key (js2-create-type-node t))
-    (when (js2-match-token js2-HOOK)         ; match a?
-      (setq optional t))
-    (print key)
-    (if (not (js2-match-token js2-COLON))
-        (js2-report-error "msg.syntax")
-      (if (or (= (js2-peek-token) js2-COMMA) ; match {a:,
-              (= (js2-peek-token) js2-RP))   ; match {a:}
-          (js2-report-error "msg.syntax")
-        (setq value (js2-create-type-node))
-        (print value)
+    (cond
+     ((= tt js2-TRIPLEDOT)              ; match {...a}
+      )
+     ((or (= tt js2-LP)                 ; match {(): a} or {<T>(): a}
+          (= tt js2-LT))
+      )
+     ((and (= tt js2-NAME)
+           (or (string= name "get")
+               (string= name "set")))   ; match {get foo(): a} or {set foo(): a}
+      )
+     ((or (= tt js2-ADD)                ; match {+a: b} or {-a: b}
+          (= tt js2-SUB))
+      (js2-parse-object-prop-type tt))
+     ((= tt js2-LB)                     ; match {[a]: b}
+      )
+     (t
+      (js2-unget-token)
+      (setq key (js2-create-type-node t))
+      ;; flow not allow optional method in object, e.g. a?() {}
+      ;; but typescript support this syntax
+      (when (js2-match-token js2-HOOK)         ; match a?
+        (setq optional t))
+      (let ((next-tt (js2-get-token)))
+        (cond
+         ((= next-tt js2-LP)            ; match a(
+          (setq value (js2-parse-function-type t))
+          (print value))
+         ((= next-tt js2-COLON)
+          (if (or (= (js2-peek-token) js2-COMMA) ; match {a:,
+                  (= (js2-peek-token) js2-RP))   ; match {a:}
+              (js2-report-error "msg.syntax")
+            (setq value (js2-create-type-node))))
+         (t
+          (js2-unget-token)
+          (js2-report-error "msg.syntax")))
         (make-js2-object-prop-type-node :pos pos
                                         :len (- (js2-current-token-end) pos)
                                         :key key
                                         :value value
-                                        :optional optional)))))
+                                        :optional optional
+                                        :kind kind))
+      ))))
 
-(defun js2-parse-function-type ()
+(defun js2-parse-function-type (&optional method-p)
   "Parse function type."
-  (if (js2-match-token js2-RP)                          ; match ()
-      (if (not (js2-match-token js2-ARROW))
-          (js2-report-error "msg.syntax")
-        (let ((return-type (js2-create-type-node t)))   ; match () =>
-          (make-js2-function-type-node :pos pos
-                                       :len (- (js2-current-token-end) pos)
-                                       :return-type return-type)))
-    (let ((continue t)                                  ; match (
-          (function-p t)
-          (fst-p t)
-          name-p
-          params rest trailing)
-      (if (js2-match-token js2-COMMA)                   ; match (,
-          (prog1 types
-            (js2-report-error "msg.syntax"))
-        ;; parse params
-        (if (js2-match-token js2-TRIPLEDOT)             ; match (...a rest only
-            (progn
-              (setq rest (js2-parse-function-type-param))
-              (unless (js2-match-token js2-RP)
-                (js2-report-error "msg.syntax")))
-          (while continue
-            (let ((param (js2-parse-function-type-param fst-p)))
-              (if (not param)                           ; match (;
-                  (setq continue nil)
-                (push param params)))
-            (setq fst-p nil)
-            (if (js2-match-token js2-COMMA)             ; match (a,
-                (let ((next-tt (js2-get-token)))
-                  (cond
-                   ((= next-tt js2-RP)                  ; match (a,)
-                    (setq continue nil
-                          trailing t))
-                   ((= next-tt js2-ARROW)               ; match (a, =>
-                    (setq continue nil)
-                    (js2-report-error "msg.syntax"))
-                   ((= next-tt js2-TRIPLEDOT)           ; match (a, ...a
-                    (setq rest (js2-parse-function-type-param)
-                          trailing nil
-                          continue nil)
-                    (unless (js2-match-token js2-RP)
-                      (js2-report-error "msg.syntax")))
-                   (t
-                    (js2-unget-token))))
-              (setq continue nil)
-              (unless (js2-match-token js2-RP)
-                (js2-report-error "msg.syntax")))))
-        ;; parse return type
-        (if (not (js2-match-token js2-ARROW))
-            (if (or (= (js2-current-token-type) js2-LP) ; match (; report error
-                    (not params))                       ; match (...a, report error
-                (js2-report-error "msg.syntax")
-              (let ((node (caar params)))               ; match (a) only, not a function type
-                (setf (js2-type-annotation-node-parents-p node) t)
-                node))
-          (let ((return-type (js2-create-type-node t))) ; match () =>
-            (when params
-              (setq params (reverse params))
-              (when (listp (car params))
-                (setcar params (car (cdar params)))))
+  (let ((pos (js2-current-token-beg))
+        (return-token (if method-p js2-COLON js2-ARROW)))
+    (if (js2-match-token js2-RP)                          ; match ()
+        (if (not (js2-match-token return-token))
+            (js2-report-error "msg.syntax")
+          (let ((return-type (js2-create-type-node t)))   ; match () =>
             (make-js2-function-type-node :pos pos
                                          :len (- (js2-current-token-end) pos)
                                          :return-type return-type
-                                         :params params
-                                         :rest rest
-                                         :trailing trailing)))))))
+                                         :method-p method-p)))
+      (let ((continue t)                                  ; match (
+            (function-p t)
+            (fst-p t)
+            name-p
+            params rest trailing)
+        (if (js2-match-token js2-COMMA)                   ; match (,
+            (js2-report-error "msg.syntax")
+          ;; parse params
+          (if (js2-match-token js2-TRIPLEDOT)             ; match (...a rest only
+              (progn
+                (setq rest (js2-parse-function-type-param))
+                (unless (js2-match-token js2-RP)
+                  (js2-report-error "msg.syntax")))
+            (while continue
+              (let ((param (js2-parse-function-type-param fst-p)))
+                (if (not param)                           ; match (;
+                    (setq continue nil)
+                  (push param params)))
+              (setq fst-p nil)
+              (if (js2-match-token js2-COMMA)             ; match (a,
+                  (let ((next-tt (js2-get-token)))
+                    (cond
+                     ((= next-tt js2-RP)                  ; match (a,)
+                      (setq continue nil
+                            trailing t))
+                     ((= next-tt return-token)            ; match (a, =>
+                      (setq continue nil)
+                      (js2-report-error "msg.syntax"))
+                     ((= next-tt js2-TRIPLEDOT)           ; match (a, ...a
+                      (setq rest (js2-parse-function-type-param)
+                            trailing nil
+                            continue nil)
+                      (unless (js2-match-token js2-RP)
+                        (js2-report-error "msg.syntax")))
+                     (t
+                      (js2-unget-token))))
+                (setq continue nil)
+                (unless (js2-match-token js2-RP)
+                  (js2-report-error "msg.syntax")))))
+          ;; parse return type
+          (if (not (js2-match-token return-token))
+              (if (or (= (js2-current-token-type) js2-LP) ; match (; report error
+                      (not params))                       ; match (...a, report error
+                  (js2-report-error "msg.syntax")
+                (let ((node (caar params)))               ; match (a) only, not a function type
+                  (setf (js2-type-annotation-node-parents-p node) t)
+                  node))
+            (let ((return-type (js2-create-type-node t))) ; match () =>
+              (when params
+                (setq params (reverse params))
+                (when (listp (car params))
+                  (setcar params (car (cdar params)))))
+              (make-js2-function-type-node :pos pos
+                                           :len (- (js2-current-token-end) pos)
+                                           :return-type return-type
+                                           :params params
+                                           :rest rest
+                                           :method-p method-p
+                                           :trailing trailing))))))))
 
 (defun js2-parse-function-type-param (&optional fst-p)
   "Parse function type param."
