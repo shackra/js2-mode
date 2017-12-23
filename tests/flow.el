@@ -193,7 +193,8 @@ the test."
 
 (js2-deftest-parse flow-generic-params-type-2
   "var a: a<;"
-  :syntax-error "<")
+  :syntax-error "<"
+  :errors-count 2)
 
 (js2-deftest-parse flow-generic-params-type-3
   "var a: a<,;"
@@ -205,7 +206,8 @@ the test."
 
 (js2-deftest-parse flow-generic-params-type-5
   "var a: a<b,;"
-  :syntax-error ",")
+  :syntax-error ","
+  :errors-count 2)
 
 (js2-deftest-parse flow-generic-params-type-6
   "var a: a<,>;"
@@ -393,8 +395,8 @@ the test."
 (js2-deftest-parse flow-function-type-param-tuple-type
   "var a: [] => c;")
 
-;; (js2-deftest-parse flow-function-type-param-object-type
-;;   "var a: {} => c;")
+(js2-deftest-parse flow-function-type-param-object-type
+  "var a: {} => c;")
 
 (js2-deftest-parse flow-function-type-param-function-type
   "var a: (b => c) => d;")
@@ -402,7 +404,7 @@ the test."
 (js2-deftest-parse flow-function-type-param-no-closed
   "var a: (;"
   :syntax-error "("
-  :errors-count 2)
+  :errors-count 3)
 
 (js2-deftest-parse flow-function-type-param-free
   "var a: b => c;")
@@ -506,8 +508,8 @@ the test."
 (js2-deftest-parse flow-object-type-prop-method-optional
   "var a: {b?(): c};")
 
-;; (js2-deftest-parse flow-object-type-prop-indexed
-;;   "var a: {[b]: c};")
+(js2-deftest-parse flow-object-type-prop-indexed
+  "var a: {[b]: c};")
 
 (js2-deftest-parse flow-object-type-prop-indexed-named
   "var a: {[b: c]: d};")
@@ -518,54 +520,117 @@ the test."
 (js2-deftest-parse flow-object-type-prop-call-2
   "var a: {<b>(): c};")
 
-;; (js2-deftest-parse flow-object-type-prop-rest
-;;   "var a: { ...b };")
+(js2-deftest-parse flow-object-type-prop-rest
+  "var a: {...b};")
 
-;; (js2-deftest-parse flow-object-type-prop-rest-2
-;;   "var a: { ...b: c };")
+(js2-deftest-parse flow-object-type-prop-rest-2
+  "var a: {...b: c};"
+  :syntax-error "b"
+  :errors-count 5)
 
 (js2-deftest-parse flow-object-type-props
   "var a: {b: c, d: e};")
 
-;; (js2-deftest-parse flow-object-no-closed
-;;   "var a: { b:;")
+(js2-deftest-parse flow-object-type-props-2
+  "var a: {b: c, ...d, +[e: f]: g, <h>(i: g, k, ...l): m, get n(o: p): q,};")
 
-;; (js2-deftest-parse flow-object-no-closed-2
-;;   "var a: { b: c;")
+(js2-deftest-parse flow-object-no-closed
+  "var a: {b:;"
+  :syntax-error ":"
+  :errors-count 2)
 
-;; (js2-deftest-parse flow-object-no-closed-3
-;;   "var a: { b: c,;")
+(js2-deftest-parse flow-object-no-closed-2
+  "var a: { b: c;"
+  :syntax-error "c")
 
-;; (js2-deftest-parse flow-object-type-props-trailing-commas
-;;   "var a: { b: c, };")
+(js2-deftest-parse flow-object-no-closed-3
+  "var a: { b: c,;"
+  :syntax-error ","
+  :errors-count 3)
 
-;; (js2-deftest-parse flow-object-type-exact
-;;   "var a: {| b: c |};")
+(js2-deftest-parse flow-object-type-props-trailing-commas
+  "var a: {b: c,};")
 
-;; (js2-deftest-parse flow-object-type-exact-no-closed
-;;   "var a: {| b: c };")
+(js2-deftest-parse flow-object-type-exact
+  "var a: {|b: c|};")
 
-;; (js2-deftest-parse flow-object-type-exact-no-closed-2
-;;   "var a: {| b: c;")
+(js2-deftest-parse flow-object-type-exact-no-closed
+  "var a: {|b: c};"
+  :syntax-error "c"
+  :errors-count 2)
 
-;; (js2-deftest-parse flow-object-type-exact-with-union
-;;   "var a: {| b: c | d |};")
+(js2-deftest-parse flow-object-type-exact-no-closed-2
+  "var a: {|b: c;"
+  :syntax-error "c")
 
-;; (js2-deftest-parse flow-object-type-exact-with-union-2
-;;   "var a: {| b: | c |};")
+(js2-deftest-parse flow-object-type-exact-with-union
+  "var a: {|b: c | d|};")
 
-;; (js2-deftest-parse flow-object-type-exact-with-union-3
-;;   "var a: { b: c |};")
+(js2-deftest-parse flow-object-type-exact-with-union-2
+  "var a: {|b: | c|};")
 
-;; (js2-deftest-parse flow-object-type-exact-with-union-no-closed
-;;   "var a: {| b: | c };")
+(js2-deftest-parse flow-object-type-exact-with-union-3
+  "var a: {b: c|};"
+  :syntax-error "c"
+  :errors-count 3)
 
-;; (js2-deftest-parse flow-object-type-exact-with-union-no-closed-2
-;;   "var a: {| b: | c;")
+(js2-deftest-parse flow-object-type-exact-with-union-no-closed
+  "var a: {|b: | c};"
+  :syntax-error "c"
+  :errors-count 2)
+
+(js2-deftest-parse flow-object-type-exact-with-union-no-closed-2
+  "var a: {|b: | c;"
+  :syntax-error "c"
+  :errors-count 1)
 
 ;; Intersection type
+
+(js2-deftest-parse flow-intersection-type
+  "var a: b & c;")
+
+(js2-deftest-parse flow-intersection-type-2
+  "var a: & b & c;")
+
+(js2-deftest-parse flow-intersection-type-3
+  "var a: b & c & d;")
+
+(js2-deftest-parse flow-intersection-type-4
+  "var a: &;"
+  :syntax-error "&")
+
 ;; Union type
+
+(js2-deftest-parse flow-union-type
+  "var a: b | c;")
+
+(js2-deftest-parse flow-union-type-2
+  "var a: | b | c;")
+
+(js2-deftest-parse flow-union-type-3
+  "var a: b | c | d;")
+
+(js2-deftest-parse flow-union-type-4
+  "var a: |;"
+  :syntax-error "|")
+
 ;; Variables
+
+(js2-deftest-parse variable-with-type
+  "var a: a;")
+
+(js2-deftest-parse variable-with-type-multi
+  "var a: a, b: b;")
+
+(js2-deftest-parse variable-with-type-init
+  "var a: a = 42;")
+
+(js2-deftest-parse variable-with-type-let
+  "let a: a;")
+
+(js2-deftest-parse variable-with-type-const
+  "const a: a;")
+
 ;; Functions
 ;; Classes
 ;; Interface

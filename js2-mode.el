@@ -4643,33 +4643,40 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
 (js2--struct-put 'js2-union-type-node 'js2-printer 'js2-print-union-type-node)
 
 (defun js2-print-union-type-node (n i)
-  (let ((begin-p (js2-union-type-node-begin-p n))
-        (types (js2-union-type-node-types n)))
+  (let ((types (js2-union-type-node-types n))
+        (begin-p (js2-union-type-node-begin-p n)))
     (when begin-p
-      (insert "|"))
+      (insert "| "))
     (when types
-      ;; (js2-print-ast (car types) 0)
-      (dolist (type types)
-        (js2-print-ast type 0)
-        (insert "| ")
-        )
-      )
-    ))
+      (js2-print-ast (car types) 0)
+      (dolist (tn (cdr types))
+        (insert " | ")
+        (js2-print-ast tn 0)))))
 
 (cl-defstruct (js2-intersection-type-node
                (:include js2-node)
-               (:constructor make-js2-intersection-type-node (&key (type js2-BITOR)
+               (:constructor make-js2-intersection-type-node (&key (type js2-BITAND)
                                                                    (pos js2-ts-cursor)
-                                                                   len types)))
+                                                                   len
+                                                                   types
+                                                                   begin-p)))
   "AST node for intersection type."
-  types)  ; intersection types
+  types
+  begin-p)
 
 (js2--struct-put 'js2-intersection-type-node 'js2-visitor 'js2-visit-none)
 (js2--struct-put 'js2-intersection-type-node 'js2-printer 'js2-print-intersection-type-node)
 
 (defun js2-print-intersection-type-node (n i)
-  (insert ("& ")
-          ))
+  (let ((types (js2-intersection-type-node-types n))
+        (begin-p (js2-intersection-type-node-begin-p n)))
+    (when begin-p
+      (insert "& "))
+    (when types
+      (js2-print-ast (car types) 0)
+      (dolist (tn (cdr types))
+        (insert " & ")
+        (js2-print-ast tn 0)))))
 
 (cl-defstruct (js2-function-type-node
                (:include js2-node)
@@ -4759,18 +4766,23 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
                                                              (pos js2-ts-cursor)
                                                              len
                                                              properties
-                                                             trailing)))
+                                                             trailing
+                                                             delimiter)))
   "AST node for object type."
   properties
-  trailing)
+  trailing
+  delimiter)
 
 (js2--struct-put 'js2-object-type-node 'js2-visitor 'js2-visit-none)
 (js2--struct-put 'js2-object-type-node 'js2-printer 'js2-print-object-type-node)
 
 (defun js2-print-object-type-node (n i)
-  (let ((trailing (js2-object-type-node-trailing n))
-        (ps (js2-object-type-node-properties n)))
-    (insert "{")
+  (let* ((trailing (js2-object-type-node-trailing n))
+         (ps (js2-object-type-node-properties n))
+         (delimiter (js2-object-type-node-delimiter n))
+         (beg-delim (if (= delimiter js2-LCB) "{|" "{"))
+         (end-delim (if (= delimiter js2-LCB) "|}" "}")))
+    (insert beg-delim)
     (when ps
       (js2-print-ast (car ps) 0)
       (dolist (prop (cdr ps))
@@ -4778,7 +4790,7 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
         (js2-print-ast prop 0)))
     (when trailing
       (insert ","))
-    (insert "}")))
+    (insert end-delim)))
 
 (cl-defstruct (js2-object-prop-type-node
                (:include js2-node)
@@ -4812,29 +4824,34 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
         (optional (js2-object-prop-type-node-optional n))
         (kind (js2-object-prop-type-node-kind n))
         (call-p (js2-object-prop-type-node-call-p n))
+        (spread-p (js2-object-prop-type-node-spread-p n))
         (indexed-p (js2-object-prop-type-node-indexed-p n))
         (prop-name (js2-object-prop-type-node-prop-name n)))
     (if call-p
         (js2-print-ast value 0)
-      (when kind
-        (if (numberp kind)
-            (cond
-             ((= kind js2-ADD)
-              (insert "+"))
-             ((= kind js2-SUB)
-              (insert "-")))
-          (insert kind)
-          (insert " ")))
-      (when indexed-p
-        (insert "["))
-      (when prop-name
-        (js2-print-ast prop-name 0))
-      (js2-print-ast key 0)
-      (when indexed-p
-        (insert "]"))
-      (when optional
-        (insert "?"))
-      (js2-print-ast value 0))))
+      (if spread-p
+          (progn
+            (insert "...")
+            (js2-print-ast value 0))
+        (when kind
+          (if (numberp kind)
+              (cond
+               ((= kind js2-ADD)
+                (insert "+"))
+               ((= kind js2-SUB)
+                (insert "-")))
+            (insert kind)
+            (insert " ")))
+        (when indexed-p
+          (insert "["))
+        (when prop-name
+          (js2-print-ast prop-name 0))
+        (js2-print-ast key 0)
+        (when indexed-p
+          (insert "]"))
+        (when optional
+          (insert "?"))
+        (js2-print-ast value 0)))))
 
 (cl-defstruct (js2-tuple-type-node
                (:include js2-node)
@@ -11792,7 +11809,7 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
 (defun js2-create-type-node (&optional no-colon parents-p)
   "Create type annoation node."
   (let ((beg (js2-current-token-beg))
-        (type (js2-parse-free-function-type)))
+        (type (js2-parse-union-type)))
     (when type
       (make-js2-type-annotation-node :pos beg
                                      :len (- (js2-current-token-end) beg)
@@ -11802,11 +11819,43 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
 
 (defun js2-parse-union-type ()
   "Parse union type, e.g. var v: a | b"
-  )
+  (let ((pos (js2-current-token-beg))
+        types node begin-p)
+    (when (js2-match-token js2-BITOR)
+      (setq begin-p t))
+    (setq node (js2-parse-intersection-type))
+    (if (not node)
+        (js2-report-error "msg.syntax")
+      (push node types)
+      (while (js2-match-token js2-BITOR)
+        (push (js2-parse-intersection-type) types))
+      (if (and (not (cdr types))
+               (not begin-p))
+          (car types)
+        (make-js2-union-type-node :pos pos
+                                  :len (- (js2-current-token-end) pos)
+                                  :types (nreverse types)
+                                  :begin-p begin-p)))))
 
 (defun js2-parse-intersection-type ()
   "Parse union type. e.g. var v: a & b"
-  )
+  (let ((pos (js2-current-token-beg))
+        types node begin-p)
+    (when (js2-match-token js2-BITAND)
+      (setq begin-p t))
+    (setq node (js2-parse-free-function-type))
+    (if (not node)
+        (js2-report-error "msg.syntax")
+      (push node types)
+      (while (js2-match-token js2-BITAND)
+        (push (js2-parse-free-function-type) types))
+      (if (and (not (cdr types))
+               (not begin-p))
+          (car types)
+        (make-js2-intersection-type-node :pos pos
+                                         :len (- (js2-current-token-end) pos)
+                                         :types (nreverse types)
+                                         :begin-p begin-p)))))
 
 (defun js2-parse-free-function-type ()
   "Parse function type without parens wrap the params, e.g. var v: a => b"
@@ -12085,7 +12134,8 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
   (let ((end-token (if (= begin-token js2-LCB) js2-RCB js2-RC)))
     (if (js2-match-token end-token)                     ; match {}
         (make-js2-object-type-node :pos pos
-                                   :len (- (js2-current-token-end) pos))
+                                   :len (- (js2-current-token-end) pos)
+                                   :delimiter begin-token)
       (let ((continue t)                                ; match {
             properties trailing)
         (if (js2-match-token js2-COMMA)                 ; match {,
@@ -12106,18 +12156,23 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
           (make-js2-object-type-node :pos pos
                                      :len (- (js2-current-token-end) pos)
                                      :properties (nreverse properties)
-                                     :trailing trailing))))))
+                                     :trailing trailing
+                                     :delimiter begin-token))))))
 
 (defun js2-parse-object-prop-type (&optional kind indexed-p prop-name key)
   "Parse prop type, used for object type, type alias and interface."
   (let ((pos (js2-current-token-beg))
         (tt (js2-get-token))
         (name (js2-current-token-string))
-        optional rest call-p value spread-p
+        optional value
         type-params)                    ; for call prop type params
     (cond
      ((= tt js2-TRIPLEDOT)              ; match {...a}
-      )
+      (setq value (js2-parse-name (js2-get-token)))
+      (make-js2-object-prop-type-node :pos pos
+                                      :len (- (js2-current-token-end) pos)
+                                      :value value
+                                      :spread-p t))
      ((or (= tt js2-LP)                 ; match {(): a} or {<T>(): a}
           (= tt js2-LT))
       (when (= tt js2-LT)
