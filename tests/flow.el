@@ -98,6 +98,28 @@ the test."
   (let ((beg (js2-node-abs-pos node)))
     (buffer-substring-no-properties beg (+ beg (js2-node-len node)))))
 
+(defun js2-test-indent (content keep-indent)
+  (let ((s (replace-regexp-in-string "^ *|" "" content)))
+    (with-temp-buffer
+      (insert
+       (if keep-indent
+           s
+         (replace-regexp-in-string "^ *" "" s)))
+      (js2-jsx-mode)
+      (js2-reparse) ; solely for js2-jsx-self-closing, for some reason
+      (indent-region (point-min) (point-max))
+      (should (string= s (buffer-substring-no-properties
+                          (point-min) (point)))))))
+
+(cl-defmacro js2-deftest-indent (name content &key bind keep-indent)
+  `(ert-deftest ,(intern (format "js2-%s" name)) ()
+     (let ,(append '(indent-tabs-mode
+                     (js2-basic-offset 2)
+                     (js2-pretty-multiline-declarations t)
+                     (inhibit-point-motion-hooks t))
+                   bind)
+       (js2-test-indent ,content ,keep-indent))))
+
 ;;; Type annotations
 
 ;; Primitive type
@@ -503,7 +525,7 @@ the test."
 (js2-deftest-parse flow-object-type-prop-method-getset-2
   "var a: {get set b(): c};"
   :syntax-error "set"
-  :errors-count 7)
+  :errors-count 4)
 
 (js2-deftest-parse flow-object-type-prop-method-optional
   "var a: {b?(): c};")
@@ -620,23 +642,83 @@ the test."
   "var a: a;")
 
 (js2-deftest-parse variable-with-type-multi
-  "var a: a, b: b;")
+  "var a: b, c: d;")
 
 (js2-deftest-parse variable-with-type-init
-  "var a: a = 42;")
+  "var a: b = 42;")
 
 (js2-deftest-parse variable-with-type-let
-  "let a: a;")
+  "let a: b;")
 
 (js2-deftest-parse variable-with-type-const
-  "const a: a;")
+  "const a: b;")
 
 ;; Functions
+
+(js2-deftest-parse function-stmt-no-type
+  "function a() {\n}")
+
+(js2-deftest-parse function-expr-no-type
+  "var a = function() {};")
+
+(js2-deftest-parse arrow-function-no-type
+  "var a = () => {};")
+
+(js2-deftest-parse function-stmt-return-type
+  "function a(): b {\n}")
+
+(js2-deftest-parse function-expr-return-type
+  "var a = function(): b {};")
+
+(js2-deftest-parse arrow-function-return-type
+  "var a = (): b => {};")
+
+(js2-deftest-parse function-stmt-type-params
+  "function a<b>() {\n}")
+
+(js2-deftest-parse function-expr-type-params
+  "var a = function <b>() {};")
+
+(js2-deftest-parse arrow-function-type-params
+  "var a = <b>() => {};")
+
+(js2-deftest-parse async-function-stmt-type-params
+  "async function a<b>() {\n}")
+
+(js2-deftest-parse async-function-expr-type-params
+  "var a = async function <b>() {};")
+
+(js2-deftest-parse async-arrow-function-type-params
+  "var a = <b> async () => {};")
+
+(js2-deftest-parse function-stmt-param-type
+  "function a(b: c) {\n}")
+
+(js2-deftest-parse function-stmt-param-type-2
+  "function a(b: c, []: d, {}: e, ...f: g) {\n}")
+
+(js2-deftest-parse function-stmt-param-type-3
+  "function a(b: c, d, e: f = 42, ...g) {\n}")
+
+(js2-deftest-parse function-stmt-param-type-4
+  "var a = (b: c) => {};")
+
+(js2-deftest-parse function-stmt-param-type-5
+  "var a = b: c => {};"
+  :syntax-error ";"
+  :errors-count 2)
+
+(js2-deftest-parse function-type
+  "var a = <a>(b: c, d): e => {};")
+
+(js2-deftest-parse function-type-2
+  "function a<b>(c: d): e {\n}")
+
 ;; Classes
+;; Modules
 ;; Interface
 ;; Type aliases
 ;; Opaque type aliases
-;; Modules
 ;; Type casing expr
 ;; Declares
 ;; Utilities
