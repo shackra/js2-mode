@@ -643,8 +643,9 @@ which doesn't seem particularly useful, but Rhino permits it."
 (defvar js2-TYPE 176)                   ; type alias
 (defvar js2-OPAQUE 177)                 ; opaque type alias
 (defvar js2-DECLARE 178)                ; declare
+(defvar js2-CHECKS 179)                 ; predicate functions annotation
 
-(defconst js2-num-tokens (1+ js2-DECLARE))
+(defconst js2-num-tokens (1+ js2-CHECKS))
 
 (defconst js2-debug-print-trees nil)
 
@@ -3255,7 +3256,8 @@ a `js2-label-node' or the innermost enclosing loop.")
                                                           async
                                                           lp rp
                                                           return-type
-                                                          type-params)))
+                                                          type-params
+                                                          predicate)))
   "AST node for a function declaration.
 The `params' field is a Lisp list of nodes.  Each node is either a simple
 `js2-name-node', or if it's a destructuring-assignment parameter, a
@@ -3274,7 +3276,8 @@ The `params' field is a Lisp list of nodes.  Each node is either a simple
   async            ; t if the function is defined as `async function`
   member-expr      ; nonstandard Ecma extension from Rhino
   return-type      ; the function return type
-  type-params)     ; generic type params
+  type-params      ; generic type params
+  predicate)       ; predicate function type annotation
 
 (js2--struct-put 'js2-function-node 'js2-visitor 'js2-visit-function-node)
 (js2--struct-put 'js2-function-node 'js2-printer 'js2-print-function-node)
@@ -6874,7 +6877,14 @@ its relevant fields and puts it into `js2-ti-tokens'."
                           (?%
                            (if (js2-match-char ?=)
                                js2-ASSIGN_MOD
-                             (throw 'return js2-MOD)))
+                             (if (and (js2-match-char ?c)
+                                      (js2-match-char ?h)
+                                      (js2-match-char ?e)
+                                      (js2-match-char ?c)
+                                      (js2-match-char ?k)
+                                      (js2-match-char ?s))
+                                 js2-CHECKS
+                               (throw 'return js2-MOD))))
                           (?~
                            (throw 'return js2-BITNOT))
                           (?+
@@ -9057,7 +9067,7 @@ Last token scanned is the close-curly for the function body."
     (js2-parse-function 'FUNCTION_EXPRESSION pos star-p async-p name type-params)))
 
 (defun js2-parse-function-internal (function-type pos star-p &optional async-p name type-params)
-  (let (fn-node lp return-type)
+  (let (fn-node lp return-type predicate)
     (if (= (js2-current-token-type) js2-LP) ; eventually matched LP?
         (setq lp (js2-current-token-beg)))
     (setf fn-node (make-js2-function-node :pos pos
@@ -9097,6 +9107,7 @@ Last token scanned is the close-curly for the function body."
         (setq js2-in-arrow-function t)
         (setq return-type (js2-create-type-node))
         (setq js2-in-arrow-function nil)
+        (print (js2-peek-token))
         (when (eq function-type 'FUNCTION_ARROW)
           (js2-unget-token))
         (setf (js2-function-node-return-type fn-node) return-type))

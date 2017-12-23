@@ -655,13 +655,13 @@ the test."
 
 ;; Functions
 
-(js2-deftest-parse function-stmt-no-type
+(js2-deftest-parse function-stmt-basic
   "function a() {\n}")
 
-(js2-deftest-parse function-expr-no-type
+(js2-deftest-parse function-expr-basic
   "var a = function() {};")
 
-(js2-deftest-parse arrow-function-no-type
+(js2-deftest-parse arrow-function-basic
   "var a = () => {};")
 
 (js2-deftest-parse function-stmt-return-type
@@ -672,6 +672,12 @@ the test."
 
 (js2-deftest-parse arrow-function-return-type
   "var a = (): b => {};")
+
+(js2-deftest-parse function-return-type-predicate-annotation
+  "var a = (): %checks => {};")
+
+(js2-deftest-parse function-return-type-predicate-annotation-2
+  "var a = (): b %checks => {};")
 
 (js2-deftest-parse function-stmt-type-params
   "function a<b>() {\n}")
@@ -715,6 +721,36 @@ the test."
   "function a<b>(c: d): e {\n}")
 
 ;; Classes
+
+;; (js2-deftest-parse class-stmt-basic
+;;   "class a {\n}")
+
+;; (js2-deftest-parse class-expr-basic
+;;   "var a = class {\n};")
+
+;; (js2-deftest-parse class-stmt-extends-super
+;;   "class a exnteds b{\n}")
+
+;; (js2-deftest-parse class-stmt-impl-interface
+;;   "class a implements b{\n}")
+
+;; (js2-deftest-parse class-stmt-impl-interface-multi
+;;   "class a implements b, c{\n}")
+
+;; (js2-deftest-parse class-stmt-extends-super-impl-interface-multi
+;;   "class a extends b implements c, d{\n}")
+
+;; (js2-deftest-parse class-stmt-type-params
+;;   "class a<b> {\n}")
+
+;; (js2-deftest-parse class-stmt-type-params-and-super-type-params
+;;   "class a<b> extends c<d> {\n}")
+
+;; (js2-deftest-parse class-stmt-type-params-and-super-type-params-with-interfaces
+;;   "class a<b> extends c<d> implements e, f{\n}")
+
+
+
 ;; Modules
 ;; Interface
 ;; Type aliases
