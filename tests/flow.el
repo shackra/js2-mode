@@ -840,6 +840,92 @@ the test."
 }")
 
 ;; Modules
+
+(js2-deftest-parse import-default
+  "import type from 'm';")
+
+(js2-deftest-parse import-type-default
+  "import type type from 'm';")
+
+(js2-deftest-parse import-typeof-default
+  "import typeof typeof from 'm';")
+
+(js2-deftest-parse import-default-as-local
+  "import foo as type from 'm';")
+
+(js2-deftest-parse import-type-default-as-local
+  "import type as as type from 'm';")
+
+(js2-deftest-parse import-default-as-local-type-as-name
+  "import type as as from 'm';"
+  :bind ((js2-ti-max-lookahead 3)))
+
+(js2-deftest-parse import-type-default-as-local-as-as-name
+  "import type as as as from 'm';"
+  :bind ((js2-ti-max-lookahead 4)))
+
+(js2-deftest-parse import-namespace
+  "import * as as from 'm';")
+
+(js2-deftest-parse import-type-namespace
+  "import type * as as from 'm';")
+
+(js2-deftest-parse import-named
+  "import {a as b} from 'm';")
+
+(js2-deftest-parse import-type-named
+  "import type {a as b} from 'm';")
+
+(js2-deftest-parse import-type-named-2
+  "import type {a as b, c, d as e} from 'm';")
+
+(js2-deftest-parse import-type-default-and-named
+  "import type a, {b as c} from 'm';")
+
+(js2-deftest-parse import-type-default-and-namespace
+  "import type a, * as b from 'm';")
+
+(js2-deftest-parse import-inline-type-named
+  "import {type type} from 'm';")
+
+(js2-deftest-parse import-inline-type-named-2
+  "import {type as as} from 'm';"
+  :bind ((js2-ti-max-lookahead 3)))
+
+(js2-deftest-parse import-inline-type-named-3
+  "import {type as as as} from 'm';"
+  :bind ((js2-ti-max-lookahead 4)))
+
+(js2-deftest-parse import-inline-type-named-4
+  "import {type, type as, type as as1, type as as as2} from 'm';"
+  :bind ((js2-ti-max-lookahead 4)))
+
+(js2-deftest-parse import-inline-type-named-with-kind
+  "import type {type type} from 'm';"
+  :syntax-error "type")
+
+(js2-deftest-parse export-all
+  "export * from 'm';")
+
+(js2-deftest-parse export-type-all
+  "export type * from 'm';")
+
+(js2-deftest-parse export-typeof-all
+  "export typeof * from 'm';"
+  :syntax-error "*"
+  :errors-count 3)
+
+(js2-deftest-parse export-named
+  "export {type};")
+
+(js2-deftest-parse export-type-named
+  "export type {type} from 'm';")
+
+(js2-deftest-parse export-type-named
+  "export type { type type } from 'm';"
+  :syntax-error "type"
+  :errors-count 5)
+
 ;; Interface
 ;; Type aliases
 ;; Opaque type aliases
