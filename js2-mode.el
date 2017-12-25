@@ -5349,6 +5349,49 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
     (js2-print-ast bindings 0)
     (insert ";")))
 
+(cl-defstruct (js2-opaque-type-alias-node
+               (:include js2-node)
+               (:constructor make-js2-opaque-type-alias-node (&key (type js2-INTERFACE)
+                                                                   (pos js2-ts-cursor)
+                                                                   name
+                                                                   len bindings
+                                                                   type-params
+                                                                   subtyping)))
+  "AST node for an opaque-type-alias declaration."
+  name             ; opaque-type-alias name (a `js2-node-name', or nil if anonymous)
+  type-params      ; exnteds expr wrap a parens
+  bindings
+  subtyping)
+
+(js2--struct-put 'js2-opaque-type-alias-node 'js2-visitor 'js2-visit-opaque-type-alias-node)
+(js2--struct-put 'js2-opaque-type-alias-node 'js2-printer 'js2-print-opaque-type-alias-node)
+
+(defun js2-visit-opaque-type-alias-node (n v)
+  (js2-visit-ast (js2-opaque-type-alias-node-name n) v)
+  (js2-visit-ast (js2-opaque-type-alias-node-extends n) v)
+  (dolist (e (js2-opaque-type-alias-node-bindings n))
+    (js2-visit-ast e v)))
+
+(defun js2-print-opaque-type-alias-node (n i)
+  (let* ((pad (js2-make-pad i))
+         (name (js2-opaque-type-alias-node-name n))
+         (bindings (js2-opaque-type-alias-node-bindings n))
+         (tp (js2-opaque-type-alias-node-type-params n))
+         (subtyping (js2-opaque-type-alias-node-subtyping n)))
+    (insert pad "opaque type")
+    (when name
+      (insert " ")
+      (js2-print-ast name 0))
+    (when tp
+      (when (not name)
+        (insert " "))
+      (js2-print-ast tp 0))
+    (when subtyping
+      (js2-print-ast subtyping 0))
+    (insert " = ")
+    (js2-print-ast bindings 0)
+    (insert ";")))
+
 ;;; Node utilities
 
 (defsubst js2-node-line (n)
@@ -9388,6 +9431,7 @@ node are given relative start positions and correct lengths."
     (aset parsers js2-YIELD     #'js2-parse-ret-yield)
     (aset parsers js2-INTERFACE #'js2-parse-interface)
     (aset parsers js2-TYPE      #'js2-parse-type-alias)
+    (aset parsers js2-OPAQUE    #'js2-parse-opaque-type-alias)
     parsers)
   "A vector mapping token types to parser functions.")
 
@@ -12596,7 +12640,7 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
           (setq optional t)))
       (let ((next-tt (js2-get-token)))
         (cond
-         ((= next-tt js2-LP)            ; match a(
+         ((= next-tt js2-LP)              ; match a(
           (setq value (js2-parse-function-type t)))
          ((= next-tt js2-COLON)
           (if (or (= (js2-peek-token) js2-COMMA) ; match {a:,
@@ -12769,23 +12813,6 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
     (if kind curr-tt nil)))
 
 (defun js2-parse-interface ()
-  (let ((pos (js2-current-token-beg))
-        (_ (js2-must-match-name "msg.unnamed.interface.decl"))
-        (name (js2-create-name-node t))
-        type-params)
-    (js2-set-face (js2-node-pos name) (js2-node-end name)
-                  'font-lock-function-name-face 'record)
-    ;; parse type params after name, e.g. class a<T>
-    (when (= (js2-peek-token) js2-LT)
-      (setq type-params (js2-parse-type-params)))
-    (js2-must-match js2-LC "msg.syntax")
-    (make-js2-interface-node :pos pos
-                             :len (- (js2-current-token-end) pos)
-                             :name name
-                             :type-params type-params
-                             :elems (js2-parse-object-type js2-LT))))
-
-(defun js2-parse-interface ()
   "Parse interface declatation, e.g. interface a<b> {}"
   (let ((pos (js2-current-token-beg))
         (_ (js2-must-match-name "msg.unnamed.interface.decl"))
@@ -12793,7 +12820,7 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
         type-params)
     (js2-set-face (js2-node-pos name) (js2-node-end name)
                   'font-lock-function-name-face 'record)
-    ;; parse type params after name, e.g. class a<T>
+    ;; parse type params after name, e.g. interface a<T>
     (when (= (js2-peek-token) js2-LT)
       (setq type-params (js2-parse-type-params)))
     (js2-must-match js2-LC "msg.syntax")
@@ -12811,7 +12838,7 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
         type-params)
     (js2-set-face (js2-node-pos name) (js2-node-end name)
                   'font-lock-function-name-face 'record)
-    ;; parse type params after name, e.g. class a<T>
+    ;; parse type params after name, e.g. type a<T>
     (when (= (js2-peek-token) js2-LT)
       (setq type-params (js2-parse-type-params)))
     (js2-must-match js2-ASSIGN "msg.syntax")
@@ -12820,6 +12847,29 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
                               :name name
                               :type-params type-params
                               :bindings (js2-create-type-node t))))
+
+(defun js2-parse-opaque-type-alias ()
+  "Parse type alias declatation, e.g. opaque type a<b> = c"
+  (let ((pos (js2-current-token-beg))
+        (_ (js2-must-match js2-TYPE "msg.syntax"))
+        (_ (js2-must-match-name "msg.unnamed.type.alias.decl"))
+        (name (js2-create-name-node t))
+        type-params subtyping)
+    (js2-set-face (js2-node-pos name) (js2-node-end name)
+                  'font-lock-function-name-face 'record)
+    ;; parse type params after name, e.g. opaque type a<T>
+    (when (= (js2-peek-token) js2-LT)
+      (setq type-params (js2-parse-type-params)))
+    (when (= (js2-peek-token) js2-COLON)
+      (setq subtyping (js2-parse-type-annotation)))
+    ;; TODO error pos and msg
+    (js2-must-match js2-ASSIGN "msg.syntax")
+    (make-js2-opaque-type-alias-node :pos pos
+                                     :len (- (js2-current-token-end) pos)
+                                     :name name
+                                     :type-params type-params
+                                     :bindings (js2-create-type-node t)
+                                     :subtyping subtyping)))
 
 ;;; Use AST to extract semantic information
 

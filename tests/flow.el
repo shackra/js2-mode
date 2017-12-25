@@ -956,25 +956,27 @@ the test."
 (js2-deftest-parse type-alias
   "type a = b;")
 
-;; (js2-deftest-parse type-alias-with-type-params
-;;   "type a<b> = c;")
+(js2-deftest-parse type-alias-with-type-params
+  "type a<b> = c;")
 
 ;; (js2-deftest-parse type-alias-with-export
 ;;   "export type a<b> = c;")
 
 ;; Opaque type aliases
 
-;; (js2-deftest-parse opaque-type-alias
-;;   "opaque type a = b;")
+(js2-deftest-parse opaque-type-alias
+  "opaque type a = b;")
 
-;; (js2-deftest-parse opaque-type-alias-with-type-params
-;;   "opaque type a<b> = c;")
+(js2-deftest-parse opaque-type-alias-with-type-params
+  "opaque type a<b> = c;")
 
-;; (js2-deftest-parse opaque-type-subtype
-;;   "opaque type a: b;")
+(js2-deftest-parse opaque-type-subtyping
+  "opaque type a<b>: c = d;")
 
-;; (js2-deftest-parse opaque-type-subtype-binding
-;;   "opaque type a: b = c;")
+(js2-deftest-parse opaque-type-subtyping-no-binding
+  "opaque type a: b;"
+  :syntax-error ";"
+  :errors-count 2)
 
 ;; (js2-deftest-parse opaque-type-alias-with-export
 ;;   "export opaque type a<b> = c;")
