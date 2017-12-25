@@ -924,11 +924,50 @@ the test."
 (js2-deftest-parse export-type-named
   "export type { type type } from 'm';"
   :syntax-error "type"
-  :errors-count 5)
+  :errors-count 7)
 
 ;; Interface
+
+(js2-deftest-parse interface
+  "interface a {}")
+
+(js2-deftest-parse interface-with-type-params
+  "interface a<b> {}")
+
+;; (js2-deftest-parse interface-with-export
+;;   "export interface a<b> {\n}")
+
 ;; Type aliases
+
+(js2-deftest-parse type-alias
+  "type a = b;")
+
+;; (js2-deftest-parse type-alias-with-type-params
+;;   "type a<b> = c;")
+
+;; (js2-deftest-parse type-alias-with-export
+;;   "export type a<b> = c;")
+
 ;; Opaque type aliases
+
+;; (js2-deftest-parse opaque-type-alias
+;;   "opaque type a = b;")
+
+;; (js2-deftest-parse opaque-type-alias-with-type-params
+;;   "opaque type a<b> = c;")
+
+;; (js2-deftest-parse opaque-type-subtype
+;;   "opaque type a: b;")
+
+;; (js2-deftest-parse opaque-type-subtype-binding
+;;   "opaque type a: b = c;")
+
+;; (js2-deftest-parse opaque-type-alias-with-export
+;;   "export opaque type a<b> = c;")
+
+;; (js2-deftest-parse opaque-type-alias-subtype-with-export
+;;   "export opaque type a<b>: c = d;")
+
 ;; Type casing expr
 ;; Declares
 ;; Utilities

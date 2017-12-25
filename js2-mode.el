@@ -5275,6 +5275,80 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
     (dotimes (_ bks)
       (insert "[]"))))
 
+(cl-defstruct (js2-interface-node
+               (:include js2-object-node)
+               (:constructor make-js2-interface-node (&key (type js2-INTERFACE)
+                                                           (pos js2-ts-cursor)
+                                                           name
+                                                           len elems
+                                                           type-params)))
+  "AST node for an interface declaration."
+  name             ; interface name (a `js2-node-name', or nil if anonymous)
+  type-params)     ; exnteds expr wrap a parens
+
+(js2--struct-put 'js2-interface-node 'js2-visitor 'js2-visit-interface-node)
+(js2--struct-put 'js2-interface-node 'js2-printer 'js2-print-interface-node)
+
+(defun js2-visit-interface-node (n v)
+  (js2-visit-ast (js2-interface-node-name n) v)
+  (js2-visit-ast (js2-interface-node-extends n) v)
+  (dolist (e (js2-interface-node-elems n))
+    (js2-visit-ast e v)))
+
+(defun js2-print-interface-node (n i)
+  (let* ((pad (js2-make-pad i))
+         (name (js2-interface-node-name n))
+         (elems (js2-interface-node-elems n))
+         (tp (js2-interface-node-type-params n)))
+    (insert pad "interface")
+    (when name
+      (insert " ")
+      (js2-print-ast name 0))
+    (when tp
+      (when (not name)
+        (insert " "))
+      (js2-print-ast tp 0))
+    (insert " ")
+    (js2-print-ast elems 0)))
+
+(cl-defstruct (js2-type-alias-node
+               (:include js2-node)
+               (:constructor make-js2-type-alias-node (&key (type js2-INTERFACE)
+                                                            (pos js2-ts-cursor)
+                                                            name
+                                                            len bindings
+                                                            type-params)))
+  "AST node for an type-alias declaration."
+  name             ; type-alias name (a `js2-node-name', or nil if anonymous)
+  type-params      ; exnteds expr wrap a parens
+  bindings)
+
+(js2--struct-put 'js2-type-alias-node 'js2-visitor 'js2-visit-type-alias-node)
+(js2--struct-put 'js2-type-alias-node 'js2-printer 'js2-print-type-alias-node)
+
+(defun js2-visit-type-alias-node (n v)
+  (js2-visit-ast (js2-type-alias-node-name n) v)
+  (js2-visit-ast (js2-type-alias-node-extends n) v)
+  (dolist (e (js2-type-alias-node-bindings n))
+    (js2-visit-ast e v)))
+
+(defun js2-print-type-alias-node (n i)
+  (let* ((pad (js2-make-pad i))
+         (name (js2-type-alias-node-name n))
+         (bindings (js2-type-alias-node-bindings n))
+         (tp (js2-type-alias-node-type-params n)))
+    (insert pad "type")
+    (when name
+      (insert " ")
+      (js2-print-ast name 0))
+    (when tp
+      (when (not name)
+        (insert " "))
+      (js2-print-ast tp 0))
+    (insert " = ")
+    (js2-print-ast bindings 0)
+    (insert ";")))
+
 ;;; Node utilities
 
 (defsubst js2-node-line (n)
@@ -9310,6 +9384,8 @@ node are given relative start positions and correct lengths."
     (aset parsers js2-WHILE     #'js2-parse-while)
     (aset parsers js2-WITH      #'js2-parse-with)
     (aset parsers js2-YIELD     #'js2-parse-ret-yield)
+    (aset parsers js2-INTERFACE #'js2-parse-interface)
+    (aset parsers js2-TYPE      #'js2-parse-type-alias)
     parsers)
   "A vector mapping token types to parser functions.")
 
@@ -9789,7 +9865,6 @@ invalid export statements."
         nil)))
      ((js2-match-token js2-MUL)
       (setq from-clause (js2-parse-from-clause))
-      ;; (print from-clause)
       (when from-clause
         (push from-clause children)))
      ((js2-match-token js2-LC)
@@ -12423,9 +12498,9 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
                                   :types (nreverse types)
                                   :trailing trailing)))))
 
-(defun js2-parse-object-type (begin-token)
+(defun js2-parse-object-type (begin-token &optional decl-p)
   "Parse object type, e.g. { a: b }"
-  (let ((end-token (if (= begin-token js2-LCB) js2-RCB js2-RC)))
+  (let ((end-token (if (and (= begin-token js2-LCB) (not decl-p)) js2-RCB js2-RC)))
     (if (js2-match-token end-token)                     ; match {}
         (make-js2-object-type-node :pos pos
                                    :len (- (js2-current-token-end) pos)
@@ -12689,6 +12764,59 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
           (js2-unget-token)
           (setq kind nil))))
     (if kind curr-tt nil)))
+
+(defun js2-parse-interface ()
+  (let ((pos (js2-current-token-beg))
+        (_ (js2-must-match-name "msg.unnamed.interface.decl"))
+        (name (js2-create-name-node t))
+        type-params)
+    (js2-set-face (js2-node-pos name) (js2-node-end name)
+                  'font-lock-function-name-face 'record)
+    ;; parse type params after name, e.g. class a<T>
+    (when (= (js2-peek-token) js2-LT)
+      (setq type-params (js2-parse-type-params)))
+    (js2-must-match js2-LC "msg.syntax")
+    (make-js2-interface-node :pos pos
+                             :len (- (js2-current-token-end) pos)
+                             :name name
+                             :type-params type-params
+                             :elems (js2-parse-object-type js2-LT))))
+
+(defun js2-parse-interface ()
+  "Parse interface declatation, e.g. interface a<b> {}"
+  (let ((pos (js2-current-token-beg))
+        (_ (js2-must-match-name "msg.unnamed.interface.decl"))
+        (name (js2-create-name-node t))
+        type-params)
+    (js2-set-face (js2-node-pos name) (js2-node-end name)
+                  'font-lock-function-name-face 'record)
+    ;; parse type params after name, e.g. class a<T>
+    (when (= (js2-peek-token) js2-LT)
+      (setq type-params (js2-parse-type-params)))
+    (js2-must-match js2-LC "msg.syntax")
+    (make-js2-interface-node :pos pos
+                             :len (- (js2-current-token-end) pos)
+                             :name name
+                             :type-params type-params
+                             :elems (js2-parse-object-type js2-LT))))
+
+(defun js2-parse-type-alias ()
+  "Parse type alias declatation, e.g. type a<b> = c"
+  (let ((pos (js2-current-token-beg))
+        (_ (js2-must-match-name "msg.unnamed.type.alias.decl"))
+        (name (js2-create-name-node t))
+        type-params)
+    (js2-set-face (js2-node-pos name) (js2-node-end name)
+                  'font-lock-function-name-face 'record)
+    ;; parse type params after name, e.g. class a<T>
+    (when (= (js2-peek-token) js2-LT)
+      (setq type-params (js2-parse-type-params)))
+    (js2-must-match js2-ASSIGN "msg.syntax")
+    (make-js2-type-alias-node :pos pos
+                              :len (- (js2-current-token-end) pos)
+                              :name name
+                              :type-params type-params
+                              :bindings (js2-create-type-node t))))
 
 ;;; Use AST to extract semantic information
 
