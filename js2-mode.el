@@ -12497,7 +12497,8 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
 
 (defun js2-parse-object-type (begin-token &optional decl-p)
   "Parse object type, e.g. { a: b }"
-  (let ((end-token (if (and (= begin-token js2-LCB) (not decl-p)) js2-RCB js2-RC)))
+  (let ((pos (js2-current-token-beg))
+        (end-token (if (and (= begin-token js2-LCB) (not decl-p)) js2-RCB js2-RC)))
     (if (js2-match-token end-token)                     ; match {}
         (make-js2-object-type-node :pos pos
                                    :len (- (js2-current-token-end) pos)
