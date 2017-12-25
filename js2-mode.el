@@ -3895,7 +3895,8 @@ You can tell the quote type by looking at the first character."
                                                        extends len elems
                                                        type-params
                                                        super-type-params
-                                                       impls)))
+                                                       impls
+                                                       parens-p)))
   "AST node for an class expression.
 `elems' is a list of `js2-object-prop-node', and `extends' is an
 optional `js2-expr-node'"
@@ -3904,7 +3905,8 @@ optional `js2-expr-node'"
   extends          ; class heritage (a `js2-expr-node', or nil if none)
   type-params      ; type params
   super-type-params; extends superclass type params
-  impls)           ; implements interfaces
+  impls            ; implements interfaces
+  parens-p)        ; exnteds expr wrap a parens
 
 (js2--struct-put 'js2-class-node 'js2-visitor 'js2-visit-class-node)
 (js2--struct-put 'js2-class-node 'js2-printer 'js2-print-class-node)
@@ -3922,7 +3924,8 @@ optional `js2-expr-node'"
          (elems (js2-class-node-elems n))
          (tp (js2-class-node-type-params n))
          (stp (js2-class-node-super-type-params n))
-         (impls (js2-class-node-impls n)))
+         (impls (js2-class-node-impls n))
+         (parens-p (js2-class-node-parens-p n)))
     (insert pad "class")
     (when name
       (insert " ")
@@ -3933,7 +3936,19 @@ optional `js2-expr-node'"
       (js2-print-ast tp 0))
     (when extends
       (insert " extends ")
-      (js2-print-ast extends))
+      (when parens-p
+        (insert "("))
+      (js2-print-ast extends)
+      (when parens-p
+        (insert ")"))
+      (when stp
+        (js2-print-ast stp 0)))
+    (when impls
+      (insert " implements ")
+      (js2-print-ast (car impls) 0)
+      (dolist (impl (cdr impls))
+        (insert ", ")
+        (js2-print-ast impl 0)))
     (insert " {")
     (dolist (elem elems)
       (insert "\n")
@@ -11618,15 +11633,50 @@ If ONLY-OF-P is non-nil, only the 'for (foo of bar)' form is allowed."
 
 (defun js2-parse-class (pos form name &optional type-params)
   ;; class X [extends ...] {
-  (let (pn elems extends)
+  (let (pn elems extends
+           super-type-params parens-p
+           impls)
     (if (js2-match-token js2-EXTENDS)
         (if (= (js2-peek-token) js2-LC)
             (js2-report-error "msg.missing.extends")
-          ;; TODO(sdh): this should be left-hand-side-expr, not assign-expr
-          (setq extends (js2-parse-assign-expr))
-          (print (js2-current-token))
-          (if (not extends)
-              (js2-report-error "msg.bad.extends"))))
+          (if (js2-match-token js2-IMPLEMENTS)
+              (js2-report-error "msg.bad.extends")
+            ;; TODO(sdh): this should be left-hand-side-expr, not assign-expr
+            ;;
+            ;; TODO(Rabbit): the sub expr would be the ident, member, call,
+            ;; or a literal. If we meet `js2-LP' then parse assign-expr.
+            ;; FIXME: pass the test only, should parse more token type.
+            ;; FIXME: conflict with object literal. `js2-LC'
+            ;;   class extends {} {}
+            ;; ----------------^
+            (let ((tt (js2-get-token))
+                  name-node)
+              (cond
+               ((= tt js2-LP)
+                (setq extends (js2-parse-assign-expr)
+                      parens-p t)
+                (js2-must-match js2-RP "msg.syntax"))
+               ((= tt js2-NAME)
+                (setq name-node (js2-parse-name (js2-current-token)))
+                (setq extends (js2-parse-member-expr-tail t name-node)))
+               (t
+                (setq extends (js2-parse-primary-expr)))))
+            ;; parse superclass type params
+            (when (= (js2-peek-token) js2-LT)
+              (setq super-type-params (js2-parse-type-params)))
+            (if (not extends)
+                (js2-report-error "msg.bad.extends")))))
+    ;; parse implements interfaces node
+    (if (js2-match-token js2-IMPLEMENTS)
+        (if (= (js2-peek-token) js2-LC)
+            (js2-report-error "msg.missing.implements") ; match implements {
+          (let ((continue t))
+            (while continue
+              (push (js2-parse-name (js2-get-token)) impls)
+              (unless (js2-match-token js2-COMMA)
+                (setq continue nil)
+                (unless (= (js2-peek-token) js2-LC)
+                  (js2-report-error "msg.bad.implements")))))))
     (js2-must-match js2-LC "msg.no.brace.class")
     (setq elems (js2-parse-object-literal-elems t)
           pn (make-js2-class-node :pos pos
@@ -11635,7 +11685,10 @@ If ONLY-OF-P is non-nil, only the 'for (foo of bar)' form is allowed."
                                   :name name
                                   :extends extends
                                   :elems elems
-                                  :type-params type-params))
+                                  :type-params type-params
+                                  :super-type-params super-type-params
+                                  :parens-p parens-p
+                                  :impls (nreverse impls)))
     (apply #'js2-node-add-children
            pn name extends (js2-class-node-elems pn))
     pn))

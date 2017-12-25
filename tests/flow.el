@@ -734,32 +734,58 @@ the test."
 (js2-deftest-parse class-expr-basic
   "var a = class {\n};")
 
-;; (js2-deftest-parse class-stmt-extends-super
-;;   "class a exnteds b{\n}")
+(js2-deftest-parse class-stmt-extends-super
+  "class a extends b {\n}")
 
-;; (js2-deftest-parse class-stmt-impl-interface
-;;   "class a implements b{\n}")
+(js2-deftest-parse class-stmt-impl-interface
+  "class a implements b {\n}")
 
-;; (js2-deftest-parse class-stmt-impl-interface-multi
-;;   "class a implements b, c{\n}")
+(js2-deftest-parse class-stmt-impl-interface-multi
+  "class a implements b, c {\n}")
 
-;; (js2-deftest-parse class-stmt-extends-super-impl-interface-multi
-;;   "class a extends b implements c, d{\n}")
+(js2-deftest-parse class-stmt-extends-super-impl-interface-multi
+  "class a extends b implements c, d {\n}")
+
+(js2-deftest-parse class-stmt-bad-extends-with-impl-interface
+  "class a extends implements b {\n}"
+  :syntax-error "implements"
+  :errors-count 3)
 
 (js2-deftest-parse class-stmt-type-params
   "class a<b> {\n}")
 
-;; (js2-deftest-parse class-stmt-type-params-and-super-type-params
-;;   "class a<b> extends c<d> {\n}")
+(js2-deftest-parse class-stmt-type-params-and-super-type-params
+  "class a<b> extends c<d> {\n}")
 
-;; (js2-deftest-parse class-stmt-type-params-and-super-type-params-with-interfaces
-;;   "class a<b> extends c<d> implements e, f{\n}")
+(js2-deftest-parse class-stmt-type-params-and-super-type-params-2
+  "class a<b> extends (c)<d> {\n}")
+
+(js2-deftest-parse class-stmt-type-params-and-super-type-params-3
+  "class a<b> extends (c > 42)<d> {\n}")
+
+(js2-deftest-parse class-stmt-type-params-and-super-type-params-4
+  "class a<b> extends c.d<e> {\n}")
+
+(js2-deftest-parse class-stmt-type-params-and-super-type-params-5
+  "class a<b> extends [c]<d> {\n}")
+
+;; (js2-deftest-parse class-stmt-type-params-and-super-type-params-6
+;;   "class a<b> extends { c: d }<e> {\n}")
+
+(js2-deftest-parse class-stmt-type-params-and-super-type-params-7
+  "class a<b> extends c()<d> {\n}")
+
+(js2-deftest-parse class-stmt-type-params-and-super-type-params-with-interfaces
+  "class a<b> extends c<d> implements e, f {\n}")
 
 (js2-deftest-parse class-expr-type-params
   "var a = class a<b> {\n};")
 
 (js2-deftest-parse class-expr-type-params-no-name
   "var a = class <b> {\n};")
+
+(js2-deftest-parse class-expr-type-params-no-name-with-extends-and-interfaces
+  "var a = class <b> extends c<d> implements e, f {\n};")
 
 ;; Modules
 ;; Interface
