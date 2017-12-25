@@ -787,6 +787,58 @@ the test."
 (js2-deftest-parse class-expr-type-params-no-name-with-extends-and-interfaces
   "var a = class <b> extends c<d> implements e, f {\n};")
 
+(js2-deftest-parse class-prop-basic
+  "class a {
+  a = 42
+}")
+
+(js2-deftest-parse class-prop-type
+  "class a {
+  a: b
+}")
+
+(js2-deftest-parse class-prop-type-with-init
+  "class a {
+  a: b = 42
+}")
+
+(js2-deftest-parse class-prop-type-readonly
+  "class a {
+  +a: b
+}")
+
+(js2-deftest-parse class-prop-type-writeonly
+  "class a {
+  -a: b
+}")
+
+;; (js2-deftest-parse class-prop-type-mixed
+;;   "class a {
+;;   +a: b;
+;;   -c;
+;;   d
+;; }")
+
+(js2-deftest-parse class-prop-static-type-readonly
+  "class a {
+  static +a: b
+}")
+
+(js2-deftest-parse class-method-type
+  "class a {
+  a(b: c): d {}
+}")
+
+(js2-deftest-parse class-method-type-getset
+  "class a {
+  get a(b: c): d {}
+}")
+
+(js2-deftest-parse class-method-type-getset-readonly-static
+  "class a {
+  static +get a(b: c): d {}
+}")
+
 ;; Modules
 ;; Interface
 ;; Type aliases

@@ -3952,10 +3952,20 @@ optional `js2-expr-node'"
     (insert " {")
     (dolist (elem elems)
       (insert "\n")
-      (if (js2-node-get-prop elem 'STATIC)
-          (progn (insert (js2-make-pad (1+ i)) "static ")
-                 (js2-print-ast elem 0)) ;; TODO(sdh): indentation isn't quite right
-        (js2-print-ast elem (1+ i))))
+      (let* ((kind (js2-node-get-prop elem :kind))
+             kd)
+        (setq kd (when kind
+                   (cond
+                    ((= kind js2-ADD) "+")
+                    ((= kind js2-SUB) "-"))))
+        (if (js2-node-get-prop elem 'STATIC)
+            (progn (insert (js2-make-pad (1+ i)) "static ")
+                   (when kind (insert kd))
+                   (js2-print-ast elem 0)) ;; TODO(sdh): indentation isn't quite right
+          (if (not kind)
+              (js2-print-ast elem (1+ i))
+            (insert (js2-make-pad (1+ i)) kd)
+            (js2-print-ast elem 0)))))
     (insert "\n" pad "}")))
 
 (cl-defstruct (js2-computed-prop-name-node
@@ -3986,21 +3996,31 @@ optional `js2-expr-node'"
                (:constructor make-js2-object-prop-node (&key (type js2-COLON)
                                                              (pos js2-ts-cursor)
                                                              len left
-                                                             right op-pos)))
+                                                             right op-pos
+                                                             kind
+                                                             optional)))
   "AST node for an object literal prop:value entry.
 The `left' field is the property: a name node, string node,
 number node or expression node.  The `right' field is a
 `js2-node' representing the initializer value.  If the property
 is abbreviated, the node's `SHORTHAND' property is non-nil and
-both fields have the same value.")
+both fields have the same value."
+  kind
+  optional)
 
 (js2--struct-put 'js2-object-prop-node 'js2-visitor 'js2-visit-infix-node)
 (js2--struct-put 'js2-object-prop-node 'js2-printer 'js2-print-object-prop-node)
 
 (defun js2-print-object-prop-node (n i)
   (let* ((left (js2-object-prop-node-left n))
-         (right (js2-object-prop-node-right n)))
+         (right (js2-object-prop-node-right n))
+         (kind (js2-object-prop-node-kind n))
+         (optional (js2-object-prop-node-optional n)))
+    (when kind
+      (insert (if (= kind js2-ADD) "+" "-")))
     (js2-print-ast left i)
+    (when optional
+      (insert "?"))
     (if (not (js2-node-get-prop n 'SHORTHAND))
         (progn
           (insert ": ")
@@ -11727,10 +11747,12 @@ expression)."
         (continue t)
         tt elems elem
         elem-key-string previous-elem-key-string
-        after-comma previous-token)
+        after-comma previous-token
+        kind)
     (while continue
       (setq tt (js2-get-prop-name-token)
             static nil
+            kind nil
             elem nil
             previous-token nil)
       ;; Handle 'static' keyword only if we're in a class
@@ -11738,6 +11760,13 @@ expression)."
                  (string= "static" (js2-current-token-string)))
         (js2-record-face 'font-lock-keyword-face)
         (setq static t
+              tt (js2-get-prop-name-token)))
+      ;; Handle readonly and writeonly prop kind
+      ;; the syntax +foo, +get foo(), static +a, static +get a() was allowed
+      (when (and class-p
+                 (or (= js2-ADD tt)
+                     (= js2-SUB tt)))
+        (setq kind (js2-current-token-type)
               tt (js2-get-prop-name-token)))
       ;; Handle generator * before the property name for in-line functions
       (when (and (>= js2-language-version 200)
@@ -11787,6 +11816,11 @@ expression)."
       (if static
           (if elem (js2-node-set-prop elem 'STATIC t)
             (js2-report-error "msg.unexpected.static")))
+      ;; Handle kind for classes writeonly/readonly props.
+      ;; TODO error message.
+      (if kind
+          (if elem (js2-node-set-prop elem :kind kind)
+            (js2-report-error "msg.syntax")))
       ;; Handle commas, depending on class-p.
       (let ((tok (js2-get-prop-name-token)))
         (if (eq tok js2-COMMA)
