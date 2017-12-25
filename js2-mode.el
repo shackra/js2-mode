@@ -12487,7 +12487,7 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
       (if (js2-match-token js2-COMMA)            ; match a[,
           (js2-report-error "msg.syntax")
         (while continue
-          (push (js2-parse-type) types)
+          (push (js2-create-type-node t) types)
           (if (js2-match-token js2-COMMA)
               (when (js2-match-token js2-RB)     ; match a[b,]
                 (setq continue nil
