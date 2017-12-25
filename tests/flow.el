@@ -377,9 +377,13 @@ the test."
 (js2-deftest-parse flow-tuple-tuple-type
   "var a: [[]];")
 
+(js2-deftest-parse flow-tuple-array-type
+  "var a: [b[]];")
+
 (js2-deftest-parse flow-tuple-type-no-closed
   "var a: [;"
-  :syntax-error "[")
+  :syntax-error "["
+  :errors-count 2)
 
 (js2-deftest-parse flow-tuple-type-no-closed-2
   "var a: [b;"
@@ -387,7 +391,8 @@ the test."
 
 (js2-deftest-parse flow-tuple-type-no-closed-3
   "var a: [b,;"
-  :syntax-error ",")
+  :syntax-error ","
+  :errors-count 2)
 
 (js2-deftest-parse flow-tuple-type-trailing-comma
   "var a: [,];"
@@ -719,6 +724,15 @@ the test."
   "var a = b: c => {};"
   :syntax-error ";"
   :errors-count 2)
+
+(js2-deftest-parse function-stmt-param-type-optional
+  "function a(b?: c) {\n}")
+
+(js2-deftest-parse function-stmt-param-type-optional-2
+  "function a([]?: c) {\n}")
+
+(js2-deftest-parse function-stmt-param-type-optional-3
+  "function a(...b?: c) {\n}")
 
 (js2-deftest-parse function-type
   "var a = <a>(b: c, d): e => {};")
