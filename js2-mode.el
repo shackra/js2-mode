@@ -3345,7 +3345,10 @@ The `params' field is a Lisp list of nodes.  Each node is either a simple
              (when (and rest-p (= count len))
                (insert "..."))
              (js2-print-ast param 0)
-             (let ((ta (js2-node-get-prop param :type-annotation)))
+             (let ((optional (js2-node-get-prop param :optional))
+                   (ta (js2-node-get-prop param :type-annotation)))
+               (when optional
+                 (insert "?"))
                (when ta
                  (js2-print-ast ta 0)))
              (when (< count len)
@@ -9119,6 +9122,8 @@ represented by FN-NODE at POS."
                  (js2-define-symbol js2-LP (js2-current-token-string) param)
                  (js2-check-strict-function-params param-name-nodes (list param))
                  (setq param-name-nodes (append param-name-nodes (list param)))))
+               (when (js2-match-token js2-HOOK)
+                 (js2-node-set-prop param :optional t))
                ;; parse function param type annotation
                (when (= (js2-peek-token) js2-COLON)
                    (js2-node-set-prop param :type-annotation (js2-parse-type-annotation)))
