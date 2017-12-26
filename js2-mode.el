@@ -4054,11 +4054,13 @@ both fields have the same value."
 (cl-defstruct (js2-method-node
                (:include js2-infix-node)
                (:constructor make-js2-method-node (&key (pos js2-ts-cursor)
-                                                        len left right)))
+                                                        len left right
+                                                        type-params)))
   "AST node for a method in an object literal or a class body.
 The `left' field is the `js2-name-node' naming the method.
 The `right' field is always an anonymous `js2-function-node' with a node
-property `METHOD_TYPE' set to 'GET or 'SET. ")
+property `METHOD_TYPE' set to 'GET or 'SET. "
+  type-params)
 
 (js2--struct-put 'js2-method-node 'js2-visitor 'js2-visit-infix-node)
 (js2--struct-put 'js2-method-node 'js2-printer 'js2-print-method)
@@ -4067,7 +4069,8 @@ property `METHOD_TYPE' set to 'GET or 'SET. ")
   (let* ((pad (js2-make-pad i))
          (left (js2-method-node-left n))
          (right (js2-method-node-right n))
-         (type (js2-node-get-prop right 'METHOD_TYPE)))
+         (type (js2-node-get-prop right 'METHOD_TYPE))
+         (type-params (js2-method-node-type-params n)))
     (insert pad)
     (when type
       (insert (cdr (assoc type '((GET . "get ")
@@ -4078,6 +4081,8 @@ property `METHOD_TYPE' set to 'GET or 'SET. ")
                (eq 'STAR (js2-function-node-generator-type right)))
       (insert "*"))
     (js2-print-ast left 0)
+    (when type-params
+      (js2-print-ast type-params 0))
     (js2-print-ast right 0)))
 
 (cl-defstruct (js2-prop-get-node
@@ -12133,7 +12138,8 @@ When `js2-is-in-destructuring' is t, forms like {a, b, c} will be permitted."
                              (if (= (js2-token-type previous-token) js2-MUL)
                                  "*"
                                (js2-token-string previous-token))))
-        pos)
+        pos
+        type-params)
     (when (member prop '("get" "set" "async"))
       (setq pos (js2-token-beg previous-token))
       (js2-set-face (js2-token-beg previous-token)
@@ -12143,6 +12149,10 @@ When `js2-is-in-destructuring' is t, forms like {a, b, c} will be permitted."
     (when (and class-p
                (= (js2-peek-token) js2-COLON))
       (js2-node-set-prop key :type-annotation (js2-parse-type-annotation)))
+    ;; parse type params for class method prop
+    (when (and class-p
+               (= (js2-peek-token) js2-LT))
+      (setq type-params (js2-parse-type-params)))
     (cond
      ;; method definition: {f() {...}}
      ((and (= (js2-peek-token) js2-LP)
@@ -12150,7 +12160,7 @@ When `js2-is-in-destructuring' is t, forms like {a, b, c} will be permitted."
       (when (or (js2-name-node-p key) (js2-string-node-p key))
         ;; highlight function name properties
         (js2-record-face 'font-lock-function-name-face))
-      (js2-parse-method-prop pos key property-type))
+      (js2-parse-method-prop pos key property-type type-params))
      ;; class field or binding element with initializer
      ((and (= (js2-peek-token) js2-ASSIGN)
            (>= js2-language-version 200))
@@ -12249,7 +12259,7 @@ string or expression."
       (js2-node-add-children result prop expr)
       result))))
 
-(defun js2-parse-method-prop (pos prop type-string)
+(defun js2-parse-method-prop (pos prop type-string &optional type-params)
   "Parse method property in an object literal or a class body.
 JavaScript syntax is:
 
@@ -12280,7 +12290,8 @@ TYPE-STRING is a string `get', `set', `*', or nil, indicating a found keyword."
           result (make-js2-method-node :pos pos
                                        :len (- end pos)
                                        :left prop
-                                       :right fn))
+                                       :right fn
+                                       :type-params type-params))
     (js2-node-add-children result prop fn)
     result))
 
