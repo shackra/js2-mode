@@ -987,7 +987,48 @@ the test."
   "export opaque type a<b>: c = d;")
 
 ;; Type casing expr
+
+;; (js2-deftest-parse type-casing-expr-value
+;;   "(a: b);")
+
+;; (js2-deftest-parse type-casing-expr-value-2
+;;   "(1 + 1: a);")
+
+;; (js2-deftest-parse type-casing-expr
+;;   "let a = (b: c);")
+
+;; (js2-deftest-parse type-casing-expr-2
+;;   "let a = { b: (c: d) };")
+
+;; (js2-deftest-parse type-casing-expr-3
+;;   "let a = ([(b: c), (d: c)]: e<c>);")
+
 ;; Declares
+
+(js2-deftest-parse declare-variable
+  "declare var a = b;")
+
+(js2-deftest-parse declare-type-alias
+  "declare type a = b;")
+
+(js2-deftest-parse declare-function
+  "declare function a(): b;")
+
+(js2-deftest-parse declare-class
+  "declare class a {\n}")
+
+(js2-deftest-parse declare-module
+  "declare module a {\n}")
+
+;; (js2-deftest-parse declare-module-string-name
+;;   "declare module 'a' {}")
+
+(js2-deftest-parse declare-export
+  "declare export var a;")
+
+(js2-deftest-parse declare-cmd-exports
+  "declare module.exports: a;")
+
 ;; Utilities
 
 ;;; Conflicts

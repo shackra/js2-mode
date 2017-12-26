@@ -5316,7 +5316,7 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
 
 (cl-defstruct (js2-type-alias-node
                (:include js2-node)
-               (:constructor make-js2-type-alias-node (&key (type js2-INTERFACE)
+               (:constructor make-js2-type-alias-node (&key (type js2-TYPE)
                                                             (pos js2-ts-cursor)
                                                             name
                                                             len bindings
@@ -5354,7 +5354,7 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
 
 (cl-defstruct (js2-opaque-type-alias-node
                (:include js2-node)
-               (:constructor make-js2-opaque-type-alias-node (&key (type js2-INTERFACE)
+               (:constructor make-js2-opaque-type-alias-node (&key (type js2-OPAQUE)
                                                                    (pos js2-ts-cursor)
                                                                    name
                                                                    len bindings
@@ -5393,6 +5393,82 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
       (js2-print-ast subtyping 0))
     (insert " = ")
     (js2-print-ast bindings 0)
+    (insert ";")))
+
+(cl-defstruct (js2-declare-node
+               (:include js2-object-node)
+               (:constructor make-js2-declare-node (&key (type js2-DECLARE)
+                                                         (pos js2-ts-cursor)
+                                                         len
+                                                         decls
+                                                         module)))
+  "AST node for an declare declaration."
+  decls
+  module)
+
+(js2--struct-put 'js2-declare-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-declare-node 'js2-printer 'js2-print-declare-node)
+
+(defun js2-print-declare-node (n i)
+  (let* ((pad (js2-make-pad i))
+         (decls (js2-declare-node-decls n))
+         (m (js2-declare-node-module n)))
+    (insert pad "declare ")
+    (if (not m)
+        (js2-print-ast decls 0)
+      (insert "module ")
+      (print m)
+      (js2-print-ast m 0)
+      (insert " {\n")
+      (when decls
+        (js2-print-ast decls 0))
+      (insert "}"))))
+
+(cl-defstruct (js2-function-declare-node
+               (:include js2-object-node)
+               (:constructor make-js2-function-declare-node (&key (type js2-DECLARE)
+                                                                  (pos js2-ts-cursor)
+                                                                  len
+                                                                  name
+                                                                  body
+                                                                  type-params)))
+  "AST node for an function-declare declaration."
+  name
+  body
+  type-params)
+
+(js2--struct-put 'js2-function-declare-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-function-declare-node 'js2-printer 'js2-print-function-declare-node)
+
+(defun js2-print-function-declare-node (n i)
+  (let* ((pad (js2-make-pad i))
+         (name (js2-function-declare-node-name n))
+         (body (js2-function-declare-node-body n))
+         (type-params (js2-function-declare-node-type-params n)))
+    (insert pad "function ")
+    (js2-print-ast name 0)
+    (when type-params
+      (js2-print-ast type-params 0))
+    (js2-print-ast body 0)
+    (insert ";")))
+
+(cl-defstruct (js2-module-exports-declare-node
+               (:include js2-object-node)
+               (:constructor make-js2-module-exports-declare-node (&key (type js2-DECLARE)
+                                                                        (pos js2-ts-cursor)
+                                                                        len
+                                                                        type-annotation)))
+  "AST node for an module.exports declare declaration."
+  type-annotation)
+
+(js2--struct-put 'js2-module-exports-declare-node 'js2-visitor 'js2-visit-none)
+(js2--struct-put 'js2-module-exports-declare-node 'js2-printer 'js2-print-module-exports-declare-node)
+
+(defun js2-print-module-exports-declare-node (n i)
+  (let* ((pad (js2-make-pad i))
+         (ta (js2-module-exports-declare-node-type-annotation n)))
+    (insert pad "module.exports")
+    (js2-print-ast ta 0)
     (insert ";")))
 
 ;;; Node utilities
@@ -5956,6 +6032,7 @@ You should use `js2-print-tree' instead of this function."
                       js2-WITHEXPR
                       js2-YIELD
                       js2-INTERFACE
+                      js2-DECLARE
                       js2-TYPE
                       js2-OPAQUE))
       (aset tokens tt t))
@@ -8840,9 +8917,11 @@ Returns t on match, nil if no match."
     nil))
 
 (defun js2-must-match-name (msg-id)
-  ;; TODO(Rabbit): the flow keywords `type` and `opaque` should allow as a name.
+  ;; TODO(Rabbit): the flow keywords `type`, `opaque`, `declare`
+  ;; should allow as a name.
   (if (or (js2-match-token js2-TYPE)
-          (js2-match-token js2-OPAQUE))
+          (js2-match-token js2-OPAQUE)
+          (js2-match-token js2-DECLARE))
       t
     (if (js2-match-token js2-NAME t)
         t
@@ -9444,6 +9523,7 @@ node are given relative start positions and correct lengths."
     (aset parsers js2-INTERFACE #'js2-parse-interface)
     (aset parsers js2-TYPE      #'js2-parse-type-alias)
     (aset parsers js2-OPAQUE    #'js2-parse-opaque-type-alias)
+    (aset parsers js2-DECLARE   #'js2-parse-declare)
     parsers)
   "A vector mapping token types to parser functions.")
 
@@ -12221,6 +12301,11 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
 (js2-deflocal js2-in-type nil "state for scan tokens.")
 (js2-deflocal js2-in-function nil "state for arrow function return type.")
 
+(defface js2-primitive-type
+  '((t :foreground "SteelBlue"))
+  "Face used to highlight primitive type."
+  :group 'js2-mode)
+
 (defun js2-parse-type-annotation ()
   "Parse type annotation."
   (when (js2-match-token js2-COLON)
@@ -12400,8 +12485,9 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
 
 (defun js2-parse-primitive-type ()
   "Parse primitive type."
-  (let ((name (js2-current-token-string))
-        node)
+  (let ((pos (js2-current-token-beg))
+        (name (js2-current-token-string))
+        node generic-p)
     (cond
      ((string= name "number")
       (setq node (make-js2-number-type-node)))
@@ -12424,7 +12510,11 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
      ;; parse generic type
      (t
       (js2-unget-token)
-      (setq node (js2-parse-generic-type))))
+      (setq node (js2-parse-generic-type)
+            generic-p t)))
+    ;; highlight primitive type
+    (unless generic-p
+      (js2-set-face pos (js2-current-token-end) 'js2-primitive-type 'record))
     node))
 
 (defun js2-parse-typeof-type ()
@@ -12885,6 +12975,79 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
                                      :type-params type-params
                                      :bindings (js2-create-type-node t)
                                      :subtyping subtyping)))
+
+(defun js2-parse-declare ()
+  "Parse library definitions, e.g. declare function(): a;
+1. declaring function, e.g 'declare function foo(a: number): string'
+2. declaring class, e.g. 'declare class Foo { bar: baz }'
+3. declaring variable, e.g. 'declare var PI: number'
+4. declaring type, e.g. 'declare type ID = number'
+5. declaring module, e.g. 'declare module \"foo\" {}'
+6. declaring esm export, e.g. 'declare export default foo'
+7. declaring cmd export, e.g. 'declare module.exports: { foo: bar }'
+
+TODO: reimplement this parser."
+  (let ((pos (js2-current-token-beg))
+        (tt (js2-get-token))
+        node module)
+    (cond
+     ((or (= tt js2-VAR)
+          (= tt js2-CONST))
+      (setq node (js2-parse-const-var)))
+     ((= tt js2-LET)
+      (setq node (js2-parse-let-stmt)))
+     ((= tt js2-CLASS)
+      (setq node (js2-parse-class-stmt)))
+     ((= tt js2-FUNCTION)
+      (let ((pos (js2-current-token-beg))
+            (name (js2-parse-name (js2-get-token)))
+            type-params body)
+        (when (= (js2-peek-token) js2-LT)
+          (setq type-params (js2-parse-type-params)))
+        (js2-must-match js2-LP "msg.syntax")
+        (setq body (js2-parse-function-type t))
+        (setq node (make-js2-function-declare-node :pos pos
+                                                   :len (- (js2-current-token-end) pos)
+                                                   :name name
+                                                   :body body
+                                                   :type-params type-params))))
+     ((= tt js2-TYPE)
+      (setq node (js2-parse-type-alias)))
+     ((= tt js2-OPAQUE)
+      (setq node (js2-parse-opaque-type-alias)))
+     ((= tt js2-EXPORT)
+      (setq node (js2-parse-export)))
+     ((= tt js2-NAME)
+      (let ((pos (js2-current-token-beg))
+            (name (js2-current-token-string)))
+        (when (string= name "module")
+          (if (and (= (js2-match-token js2-DOT))
+                   (= (js2-match-token js2-NAME))
+                   (string= (js2-current-token-string) "exports"))
+              (let ((type-annotation (js2-parse-type-annotation)))
+                (setq node (make-js2-module-exports-declare-node
+                            :pos pos
+                            :len (- (js2-current-token-end) pos)
+                            :type-annotation type-annotation)))
+            (let ((curr-tt (js2-current-token-type))
+                  children)
+              (print curr-tt)
+              (cond
+               ((= curr-tt js2-NAME)
+                (setq module (js2-parse-name (js2-current-token))))
+               ((= curr-tt js2-STRING)
+                (setq module (js2-parse-primitive-type))))
+              (js2-must-match js2-LC "msg.syntax")
+              ;; TODO: the declare module body only has `import` and `declare` declarations.
+              (when (js2-match-token js2-DECLARE)
+                (push (js2-parse-declare) children)
+                (js2-match-token js2-SEMI))
+              (js2-must-match js2-RC "msg.syntax")
+              (setq node (reverse children))))))))
+    (make-js2-declare-node :pos pos
+                           :len (- (js2-current-token-end) pos)
+                           :decls node
+                           :module module)))
 
 ;;; Use AST to extract semantic information
 
