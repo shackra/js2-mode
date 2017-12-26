@@ -5954,7 +5954,10 @@ You should use `js2-print-tree' instead of this function."
                       js2-WHILE
                       js2-WITH
                       js2-WITHEXPR
-                      js2-YIELD))
+                      js2-YIELD
+                      js2-INTERFACE
+                      js2-TYPE
+                      js2-OPAQUE))
       (aset tokens tt t))
     tokens))
 
@@ -6586,7 +6589,9 @@ The values are default faces to use for highlighting the keywords.")
 
 ;; FIXME: Support strict mode-only future reserved words, after we know
 ;; which parts scopes are in strict mode, and which are not.
-(defconst js2-reserved-words '(class enum export extends import static super)
+(defconst js2-reserved-words '(class enum export extends import static super
+                                     interface implements package
+                                     private protected public)
   "Future reserved keywords in ECMAScript 5.1.")
 
 (defconst js2-keyword-names
@@ -8835,13 +8840,17 @@ Returns t on match, nil if no match."
     nil))
 
 (defun js2-must-match-name (msg-id)
-  (if (js2-match-token js2-NAME t)
+  ;; TODO(Rabbit): the flow keywords `type` and `opaque` should allow as a name.
+  (if (or (js2-match-token js2-TYPE)
+          (js2-match-token js2-OPAQUE))
       t
-    (if (eq (js2-current-token-type) js2-RESERVED)
-        (js2-report-error "msg.reserved.id" (js2-current-token-string))
-      (js2-report-error msg-id)
-      (js2-unget-token))
-    nil))
+    (if (js2-match-token js2-NAME t)
+        t
+      (if (eq (js2-current-token-type) js2-RESERVED)
+          (js2-report-error "msg.reserved.id" (js2-current-token-string))
+        (js2-report-error msg-id)
+        (js2-unget-token))
+      nil)))
 
 (defun js2-set-requires-activation ()
   (if (js2-function-node-p js2-current-script-or-fn)
@@ -9462,7 +9471,8 @@ node are given relative start positions and correct lengths."
         js2-SEMI
         js2-CLASS
         js2-FUNCTION
-        js2-EXPORT)
+        js2-EXPORT
+        js2-INTERFACE)
   "List of tokens that don't do automatic semicolon insertion.")
 
 (defconst js2-autoinsert-semi-and-warn
@@ -10790,11 +10800,6 @@ If NODE is non-nil, it is the AST node associated with the symbol."
       ;; ----^ predicate annotation only
       ;;   (): T %checks
       ;; ----^ predicate annotation after return type
-      ;; 5. class exnteds super class
-      ;; the extends after parse a assign-expr, but this will conflict with
-      ;; the super class type params.
-      ;;   class extends a<b>
-      ;; -----------------^
       (when (and (= tt js2-LT)
                  (not in-funcall))
         (js2-unget-token)
@@ -12829,15 +12834,16 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
         type-params)
     (js2-set-face (js2-node-pos name) (js2-node-end name)
                   'font-lock-function-name-face 'record)
-    ;; parse type params after name, e.g. interface a<T>
-    (when (= (js2-peek-token) js2-LT)
-      (setq type-params (js2-parse-type-params)))
-    (js2-must-match js2-LC "msg.syntax")
-    (make-js2-interface-node :pos pos
-                             :len (- (js2-current-token-end) pos)
-                             :name name
-                             :type-params type-params
-                             :elems (js2-parse-object-type js2-LT))))
+    (when name
+      ;; parse type params after name, e.g. interface a<T>
+      (when (= (js2-peek-token) js2-LT)
+        (setq type-params (js2-parse-type-params)))
+      (js2-must-match js2-LC "msg.syntax")
+      (make-js2-interface-node :pos pos
+                               :len (- (js2-current-token-end) pos)
+                               :name name
+                               :type-params type-params
+                               :elems (js2-parse-object-type js2-LT)))))
 
 (defun js2-parse-type-alias ()
   "Parse type alias declatation, e.g. type a<b> = c"
