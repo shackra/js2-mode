@@ -989,3 +989,11 @@ the test."
 ;; Type casing expr
 ;; Declares
 ;; Utilities
+
+;;; Conflicts
+
+(js2-deftest-parse type-as-variable-name
+  "const type = 42;")
+
+(js2-deftest-parse opaque-as-variable-name
+  "const opaque = 42;")
