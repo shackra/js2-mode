@@ -4037,10 +4037,13 @@ both fields have the same value."
   (let* ((left (js2-object-prop-node-left n))
          (right (js2-object-prop-node-right n))
          (kind (js2-object-prop-node-kind n))
-         (optional (js2-object-prop-node-optional n)))
+         (optional (js2-object-prop-node-optional n))
+         (ta (js2-node-get-prop left :type-annotation)))
     (when kind
       (insert (if (= kind js2-ADD) "+" "-")))
     (js2-print-ast left i)
+    (when ta
+      (js2-print-ast ta 0))
     (when optional
       (insert "?"))
     (if (not (js2-node-get-prop n 'SHORTHAND))
@@ -5417,7 +5420,6 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
     (if (not m)
         (js2-print-ast decls 0)
       (insert "module ")
-      (print m)
       (js2-print-ast m 0)
       (insert " {\n")
       (when decls
@@ -9903,7 +9905,7 @@ consumes no tokens."
                 (setf (js2-node-len pn) (- (js2-current-token-end) pos))
                 (throw 'break nil))  ; done
                ((= tt js2-CASE)
-                (setq case-expr (js2-parse-expr))
+                (setq case-expr (js2-parse-expr nil t))
                 (js2-must-match js2-COLON "msg.no.colon.case"))
                ((= tt js2-DEFAULT)
                 (if has-default
@@ -10816,8 +10818,8 @@ If NODE is non-nil, it is the AST node associated with the symbol."
         (setf (js2-node-len pn) (- (js2-current-token-end) px-pos))
         pn)))))
 
-(defun js2-parse-expr (&optional oneshot)
-  (let* ((pn (js2-parse-assign-expr))
+(defun js2-parse-expr (&optional oneshot out-function)
+  (let* ((pn (js2-parse-assign-expr nil nil out-function))
          (pos (js2-node-pos pn))
          left
          right
@@ -10825,7 +10827,7 @@ If NODE is non-nil, it is the AST node associated with the symbol."
     (while (and (not oneshot)
                 (js2-match-token js2-COMMA))
       (setq op-pos (- (js2-current-token-beg) pos))  ; relative
-      (setq right (js2-parse-assign-expr)
+      (setq right (js2-parse-assign-expr nil nil out-function)
             left pn
             pn (make-js2-infix-node :type js2-COMMA
                                     :pos pos
@@ -10836,7 +10838,7 @@ If NODE is non-nil, it is the AST node associated with the symbol."
       (js2-node-add-children pn left right))
     pn))
 
-(defun js2-parse-assign-expr (&optional in-funcall in-conditional)
+(defun js2-parse-assign-expr (&optional in-funcall in-conditional out-function)
   (let ((tt (js2-get-token))
         (pos (js2-current-token-beg))
         pn left right op-pos
@@ -10896,7 +10898,8 @@ If NODE is non-nil, it is the AST node associated with the symbol."
       ;; not yield - parse assignment expression
       (setq pn (js2-parse-cond-expr))
       (when (and (= (js2-peek-token) js2-COLON)
-                 (not in-conditional))
+                 (not in-conditional)
+                 (not out-function))
         (js2-get-token)
         (setq js2-in-function t)
         (when (js2-match-token js2-CHECKS) ; match :%checks
@@ -12136,6 +12139,10 @@ When `js2-is-in-destructuring' is t, forms like {a, b, c} will be permitted."
       (js2-set-face (js2-token-beg previous-token)
                     (js2-token-end previous-token)
                     'font-lock-keyword-face 'record))  ; get/set/async
+    ;; parse type annotation for class elem
+    (when (and class-p
+               (= (js2-peek-token) js2-COLON))
+      (js2-node-set-prop key :type-annotation (js2-parse-type-annotation)))
     (cond
      ;; method definition: {f() {...}}
      ((and (= (js2-peek-token) js2-LP)
@@ -13031,7 +13038,6 @@ TODO: reimplement this parser."
                             :type-annotation type-annotation)))
             (let ((curr-tt (js2-current-token-type))
                   children)
-              (print curr-tt)
               (cond
                ((= curr-tt js2-NAME)
                 (setq module (js2-parse-name (js2-current-token))))

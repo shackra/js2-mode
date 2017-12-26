@@ -1038,3 +1038,10 @@ the test."
 
 (js2-deftest-parse opaque-as-variable-name
   "const opaque = 42;")
+
+(js2-deftest-parse switch-case-colon
+  "\
+switch (a) {
+case b:
+  break;
+}")
