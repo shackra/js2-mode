@@ -4037,10 +4037,13 @@ both fields have the same value."
   (let* ((left (js2-object-prop-node-left n))
          (right (js2-object-prop-node-right n))
          (kind (js2-object-prop-node-kind n))
-         (optional (js2-object-prop-node-optional n)))
+         (optional (js2-object-prop-node-optional n))
+         (ta (js2-node-get-prop left :type-annotation)))
     (when kind
       (insert (if (= kind js2-ADD) "+" "-")))
     (js2-print-ast left i)
+    (when ta
+      (js2-print-ast ta 0))
     (when optional
       (insert "?"))
     (if (not (js2-node-get-prop n 'SHORTHAND))
@@ -5417,7 +5420,6 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
     (if (not m)
         (js2-print-ast decls 0)
       (insert "module ")
-      (print m)
       (js2-print-ast m 0)
       (insert " {\n")
       (when decls
@@ -12137,6 +12139,10 @@ When `js2-is-in-destructuring' is t, forms like {a, b, c} will be permitted."
       (js2-set-face (js2-token-beg previous-token)
                     (js2-token-end previous-token)
                     'font-lock-keyword-face 'record))  ; get/set/async
+    ;; parse type annotation for class elem
+    (when (and class-p
+               (= (js2-peek-token) js2-COLON))
+      (js2-node-set-prop key :type-annotation (js2-parse-type-annotation)))
     (cond
      ;; method definition: {f() {...}}
      ((and (= (js2-peek-token) js2-LP)
@@ -13032,7 +13038,6 @@ TODO: reimplement this parser."
                             :type-annotation type-annotation)))
             (let ((curr-tt (js2-current-token-type))
                   children)
-              (print curr-tt)
               (cond
                ((= curr-tt js2-NAME)
                 (setq module (js2-parse-name (js2-current-token))))
