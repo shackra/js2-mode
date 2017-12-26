@@ -9903,7 +9903,7 @@ consumes no tokens."
                 (setf (js2-node-len pn) (- (js2-current-token-end) pos))
                 (throw 'break nil))  ; done
                ((= tt js2-CASE)
-                (setq case-expr (js2-parse-expr))
+                (setq case-expr (js2-parse-expr nil t))
                 (js2-must-match js2-COLON "msg.no.colon.case"))
                ((= tt js2-DEFAULT)
                 (if has-default
@@ -10816,8 +10816,8 @@ If NODE is non-nil, it is the AST node associated with the symbol."
         (setf (js2-node-len pn) (- (js2-current-token-end) px-pos))
         pn)))))
 
-(defun js2-parse-expr (&optional oneshot)
-  (let* ((pn (js2-parse-assign-expr))
+(defun js2-parse-expr (&optional oneshot out-function)
+  (let* ((pn (js2-parse-assign-expr nil nil out-function))
          (pos (js2-node-pos pn))
          left
          right
@@ -10825,7 +10825,7 @@ If NODE is non-nil, it is the AST node associated with the symbol."
     (while (and (not oneshot)
                 (js2-match-token js2-COMMA))
       (setq op-pos (- (js2-current-token-beg) pos))  ; relative
-      (setq right (js2-parse-assign-expr)
+      (setq right (js2-parse-assign-expr nil nil out-function)
             left pn
             pn (make-js2-infix-node :type js2-COMMA
                                     :pos pos
@@ -10836,7 +10836,7 @@ If NODE is non-nil, it is the AST node associated with the symbol."
       (js2-node-add-children pn left right))
     pn))
 
-(defun js2-parse-assign-expr (&optional in-funcall in-conditional)
+(defun js2-parse-assign-expr (&optional in-funcall in-conditional out-function)
   (let ((tt (js2-get-token))
         (pos (js2-current-token-beg))
         pn left right op-pos
@@ -10896,7 +10896,8 @@ If NODE is non-nil, it is the AST node associated with the symbol."
       ;; not yield - parse assignment expression
       (setq pn (js2-parse-cond-expr))
       (when (and (= (js2-peek-token) js2-COLON)
-                 (not in-conditional))
+                 (not in-conditional)
+                 (not out-function))
         (js2-get-token)
         (setq js2-in-function t)
         (when (js2-match-token js2-CHECKS) ; match :%checks
