@@ -2565,7 +2565,10 @@ so many of its properties will be nil.
       (js2-print-named-imports exports-list)))
     (unless (or (and default (not (js2-assign-node-p default)))
                 (and declaration (or (js2-function-node-p declaration)
-                                     (js2-class-node-p declaration))))
+                                     (js2-class-node-p declaration)
+                                     (js2-type-alias-node-p declaration)
+                                     (js2-opaque-type-alias-node-p declaration)
+                                     (js2-interface-node-p declaration))))
       (insert ";\n"))))
 
 (cl-defstruct (js2-while-node
@@ -9907,8 +9910,7 @@ invalid export statements."
             (= (js2-peek-token) js2-LC)) ; match 'export {'
         (setq type-export (js2-parse-export (js2-current-token) beg)))
        (t                                ; match 'export type a', was a type alias decl
-        ;; TODO export type alias decls
-        nil)))
+        (setq declaration (js2-parse-type-alias)))))
      ((js2-match-token js2-MUL)
       (setq from-clause (js2-parse-from-clause))
       (when from-clause
@@ -9942,6 +9944,10 @@ invalid export statements."
       (setq declaration (js2-parse-variables (js2-current-token-type) (js2-current-token-beg))))
      ((js2-match-token js2-CLASS)
       (setq declaration (js2-parse-class-stmt)))
+     ((js2-match-token js2-INTERFACE)
+      (setq declaration (js2-parse-interface)))
+     ((js2-match-token js2-OPAQUE)
+      (setq declaration (js2-parse-opaque-type-alias)))
      ((js2-match-token js2-NAME)
       (setq declaration
             (if (js2-match-async-function)
@@ -12547,7 +12553,10 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
 (defun js2-parse-object-type (begin-token &optional decl-p)
   "Parse object type, e.g. { a: b }"
   (let ((pos (js2-current-token-beg))
-        (end-token (if (and (= begin-token js2-LCB) (not decl-p)) js2-RCB js2-RC)))
+        (end-token (if (and (= begin-token js2-LCB)
+                            (not decl-p))
+                       js2-RCB
+                     js2-RC)))
     (if (js2-match-token end-token)                     ; match {}
         (make-js2-object-type-node :pos pos
                                    :len (- (js2-current-token-end) pos)

@@ -641,6 +641,8 @@ the test."
   "var a: |;"
   :syntax-error "|")
 
+;;; Declatation, Statements, Expressions
+
 ;; Variables
 
 (js2-deftest-parse variable-with-type
@@ -948,8 +950,8 @@ the test."
 (js2-deftest-parse interface-with-type-params
   "interface a<b> {}")
 
-;; (js2-deftest-parse interface-with-export
-;;   "export interface a<b> {\n}")
+(js2-deftest-parse interface-with-export
+  "export interface a<b> {}")
 
 ;; Type aliases
 
@@ -959,8 +961,8 @@ the test."
 (js2-deftest-parse type-alias-with-type-params
   "type a<b> = c;")
 
-;; (js2-deftest-parse type-alias-with-export
-;;   "export type a<b> = c;")
+(js2-deftest-parse type-alias-with-export
+  "export type a<b> = c;")
 
 ;; Opaque type aliases
 
@@ -978,11 +980,11 @@ the test."
   :syntax-error ";"
   :errors-count 2)
 
-;; (js2-deftest-parse opaque-type-alias-with-export
-;;   "export opaque type a<b> = c;")
+(js2-deftest-parse opaque-type-alias-with-export
+  "export opaque type a<b> = c;")
 
-;; (js2-deftest-parse opaque-type-alias-subtype-with-export
-;;   "export opaque type a<b>: c = d;")
+(js2-deftest-parse opaque-type-alias-subtype-with-export
+  "export opaque type a<b>: c = d;")
 
 ;; Type casing expr
 ;; Declares
