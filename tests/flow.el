@@ -963,6 +963,9 @@ the test."
 (js2-deftest-parse type-alias
   "type a = b;")
 
+(js2-deftest-parse type-alias-with-generic-type
+  "type a = b<c<d<e>>>;")
+
 (js2-deftest-parse type-alias-with-type-params
   "type a<b> = c;")
 
