@@ -9326,7 +9326,7 @@ Last token scanned is the close-curly for the function body."
           type-params)
       ;; parse function type params after name and before `js2-LP'
       (when (= (js2-peek-token) js2-LT)
-        (setq type-params (js2-parse-type-params)))
+        (setq type-params (js2-parse-type-params t)))
       (cond
        ((js2-match-token js2-LP)
         (js2-parse-function 'FUNCTION_STATEMENT pos star-p async-p name type-params))
@@ -11671,12 +11671,12 @@ array-literals, array comprehensions and regular expressions."
       (apply #'js2-node-add-children tpl kids)
       tpl)))
 
-(defun js2-parse-name (_tt)
+(defun js2-parse-name (_tt &optional no-check)
   (let ((name (js2-current-token-string))
         node)
     (setq node (if js2-compiler-xml-available
                    (js2-parse-property-name nil name 0)
-                 (js2-create-name-node 'check-activation nil name)))
+                 (js2-create-name-node (if no-check nil 'check-activation) nil name)))
     (if js2-highlight-external-variables
         (js2-record-name-node node))
     node))
@@ -12318,6 +12318,11 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
 (js2-deflocal js2-in-type nil "state for scan tokens.")
 (js2-deflocal js2-in-function nil "state for arrow function return type.")
 
+(defface js2-type-annotation
+  '((t :foreground "DimGray"))
+  "Face used to highlight primitive type."
+  :group 'js2-mode)
+
 (defface js2-primitive-type
   '((t :foreground "SteelBlue"))
   "Face used to highlight primitive type."
@@ -12561,11 +12566,14 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
 
 (defun js2-parse-generic-type-name ()
   "Parse generic type name, e.g. a or a.b"
-  (let ((pos (js2-current-token-beg))
+  (let (pos
         (continue t)
         node member)
     (when (js2-match-token js2-NAME)
-      (setq node (js2-parse-name (js2-current-token)))
+      ;; TODO(Rabbit) add to definition
+      (setq node (js2-create-name-node)
+            pos (js2-current-token-beg))
+      (js2-set-face pos (js2-current-token-end) 'js2-type-annotation 'record)
       (while (and continue (js2-match-token js2-DOT))
         (if (= (js2-peek-token) js2-NAME)
             (setq member (js2-parse-generic-type-name))
@@ -12579,7 +12587,7 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
                                     :member member))))
 
 (defun js2-parse-type-params (&optional decl-p)
-  "Parse type params, e.g. <a, b>"
+  "Parse type params, e.g. <a, b>. The param decl-p pass to `js2-parse-type-param'."
   (let ((pos (js2-current-token-beg))
         (continue t)
         params trailing)
@@ -12611,7 +12619,8 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
                                      :trailing trailing))))))
 
 (defun js2-parse-type-param (&optional param-decl-p)
-  "Parse type param, e.g. <a: b = c>"
+  "Parse type param, e.g. <a: b = c>.
+If param-decl-p was t, it will parse continue."
   (let ((pos (js2-current-token-beg))
         name type-annotation init)
     (setq name (js2-create-type-node t))
