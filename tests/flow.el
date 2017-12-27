@@ -1010,39 +1010,45 @@ the test."
 
 ;; Declares
 
-(js2-deftest-parse declare-variable
-  "declare var a = b;")
+;; (js2-deftest-parse declare-variable
+;;   "declare var a = b;")
 
-(js2-deftest-parse declare-type-alias
-  "declare type a = b;")
+;; (js2-deftest-parse declare-type-alias
+;;   "declare type a = b;")
 
-(js2-deftest-parse declare-function
-  "declare function a(): b;")
+;; (js2-deftest-parse declare-function
+;;   "declare function a(): b;")
 
-(js2-deftest-parse declare-class
-  "declare class a {\n}")
+;; (js2-deftest-parse declare-class
+;;   "declare class a {\n}")
 
-(js2-deftest-parse declare-module
-  "declare module a {\n}")
+;; (js2-deftest-parse declare-module
+;;   "declare module a {\n}")
 
 ;; (js2-deftest-parse declare-module-string-name
 ;;   "declare module 'a' {}")
 
-(js2-deftest-parse declare-export
-  "declare export var a;")
+;; (js2-deftest-parse declare-export
+;;   "declare export var a;")
 
-(js2-deftest-parse declare-cmd-exports
-  "declare module.exports: a;")
+;; (js2-deftest-parse declare-cmd-exports
+;;   "declare module.exports: a;")
 
 ;; Utilities
 
 ;;; Conflicts
 
-(js2-deftest-parse type-as-variable-name
-  "const type = 42;")
+;; (js2-deftest-parse type-as-variable-name
+;;   "const type = 42;")
 
-(js2-deftest-parse opaque-as-variable-name
-  "const opaque = 42;")
+;; (js2-deftest-parse opaque-as-variable-name
+;;   "const opaque = 42;")
+
+;; (js2-deftest-parse type-as-caller-argument
+;;   "func(type, type.a);")
+
+;; (js2-deftest-parse type-as-caller-argument
+;;   "type => { return type };")
 
 (js2-deftest-parse switch-case-colon
   "\

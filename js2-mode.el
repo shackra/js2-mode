@@ -8926,17 +8926,16 @@ Returns t on match, nil if no match."
 (defun js2-must-match-name (msg-id)
   ;; TODO(Rabbit): the flow keywords `type`, `opaque`, `declare`
   ;; should allow as a name.
-  (if (or (js2-match-token js2-TYPE)
-          (js2-match-token js2-OPAQUE)
-          (js2-match-token js2-DECLARE))
+  ;; (or (js2-match-token js2-TYPE)
+  ;;     (js2-match-token js2-OPAQUE)
+  ;;     (js2-match-token js2-DECLARE))
+  (if (js2-match-token js2-NAME t)
       t
-    (if (js2-match-token js2-NAME t)
-        t
-      (if (eq (js2-current-token-type) js2-RESERVED)
-          (js2-report-error "msg.reserved.id" (js2-current-token-string))
-        (js2-report-error msg-id)
-        (js2-unget-token))
-      nil)))
+    (if (eq (js2-current-token-type) js2-RESERVED)
+        (js2-report-error "msg.reserved.id" (js2-current-token-string))
+      (js2-report-error msg-id)
+      (js2-unget-token))
+    nil))
 
 (defun js2-set-requires-activation ()
   (if (js2-function-node-p js2-current-script-or-fn)
