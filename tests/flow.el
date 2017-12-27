@@ -952,6 +952,9 @@ the test."
 (js2-deftest-parse interface
   "interface a {}")
 
+(js2-deftest-parse interface-with-props
+  "interface a {b: c; d: e}")
+
 (js2-deftest-parse interface-with-type-params
   "interface a<b> {}")
 

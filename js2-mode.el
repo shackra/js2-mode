@@ -4885,11 +4885,13 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
                                                              len
                                                              properties
                                                              trailing
-                                                             delimiter)))
+                                                             delimiter
+                                                             ends-with)))
   "AST node for object type."
   properties
   trailing
-  delimiter)
+  delimiter
+  ends-with)
 
 (js2--struct-put 'js2-object-type-node 'js2-visitor 'js2-visit-none)
 (js2--struct-put 'js2-object-type-node 'js2-printer 'js2-print-object-type-node)
@@ -4899,15 +4901,17 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
          (ps (js2-object-type-node-properties n))
          (delimiter (js2-object-type-node-delimiter n))
          (beg-delim (if (= delimiter js2-LCB) "{|" "{"))
-         (end-delim (if (= delimiter js2-LCB) "|}" "}")))
+         (end-delim (if (= delimiter js2-LCB) "|}" "}"))
+         (ends-with (js2-object-type-node-ends-with n))
+         (eol (if (= ends-with js2-SEMI) ";" ",")))
     (insert beg-delim)
     (when ps
       (js2-print-ast (car ps) 0)
       (dolist (prop (cdr ps))
-        (insert ", ")
+        (insert eol " ")
         (js2-print-ast prop 0)))
     (when trailing
-      (insert ","))
+      (insert eol))
     (insert end-delim)))
 
 (cl-defstruct (js2-object-prop-type-node
@@ -12671,28 +12675,30 @@ If param-decl-p was t, it will parse continue."
                                   :types (nreverse types)
                                   :trailing trailing)))))
 
-(defun js2-parse-object-type (begin-token &optional decl-p)
-  "Parse object type, e.g. { a: b }"
+(defun js2-parse-object-type (begin-token &optional semi-p)
+  "Parse object type, e.g. { a: b }.
+this used for parse `Object type`, `Interface decl` and `Type Alias decl`.
+The param semi-p used for interface, e.g. interface foo { a; b; }.
+TODO: free semi supports."
   (let ((pos (js2-current-token-beg))
-        (end-token (if (and (= begin-token js2-LCB)
-                            (not decl-p))
-                       js2-RCB
-                     js2-RC)))
+        (end-token (if (= begin-token js2-LCB) js2-RCB js2-RC))
+        (delim-token (if semi-p js2-SEMI js2-COMMA)))
     (if (js2-match-token end-token)                     ; match {}
         (make-js2-object-type-node :pos pos
                                    :len (- (js2-current-token-end) pos)
-                                   :delimiter begin-token)
+                                   :delimiter begin-token
+                                   :ends-with delim-token)
       (let ((continue t)                                ; match {
             properties trailing)
-        (if (js2-match-token js2-COMMA)                 ; match {,
+        (if (js2-match-token delim-token)               ; match {,
             (js2-report-error "msg.syntax")
           ;; parse props
           (while continue
             (let ((prop (js2-parse-object-prop-type)))
-              (if (not prop)                            ; match (;
+              (if (not prop)                            ; match {;
                   (setq continue nil)
                 (push prop properties)))
-            (if (js2-match-token js2-COMMA)             ; match {a,
+            (if (js2-match-token delim-token)           ; match {a,
                 (when (js2-match-token end-token)       ; match a{b,}
                     (setq continue nil
                           trailing t))
@@ -12703,7 +12709,8 @@ If param-decl-p was t, it will parse continue."
                                      :len (- (js2-current-token-end) pos)
                                      :properties (nreverse properties)
                                      :trailing trailing
-                                     :delimiter begin-token))))))
+                                     :delimiter begin-token
+                                     :ends-with delim-token))))))
 
 (defun js2-parse-object-prop-type (&optional kind indexed-p prop-name key)
   "Parse prop type, used for object type, type alias and interface."
@@ -12959,7 +12966,7 @@ If param-decl-p was t, it will parse continue."
                                :len (- (js2-current-token-end) pos)
                                :name name
                                :type-params type-params
-                               :elems (js2-parse-object-type js2-LT)))))
+                               :elems (js2-parse-object-type js2-LT t)))))
 
 (defun js2-parse-type-alias ()
   "Parse type alias declatation, e.g. type a<b> = c"
