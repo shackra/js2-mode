@@ -2745,7 +2745,8 @@ so many of its properties will be nil.
                                                                 len
                                                                 local-name
                                                                 extern-name
-                                                                kind)))
+                                                                kind
+                                                                type-annotation)))
   "AST node for an external symbol binding.
 It contains a local-name node which is the name of the value in the
 current scope, and extern-name which is the name of the value in the
@@ -2754,7 +2755,8 @@ name is aliased as in {foo as bar}, it would have an extern-name node
 containing 'foo' and a local-name node containing 'bar'."
   local-name    ; js2-name-node with the variable name in this scope
   extern-name   ; js2-name-node with the value name in the exporting module
-  kind)         ; type kind
+  kind          ; type kind
+  type-annotation)
 
 (js2--struct-put 'js2-export-binding-node 'js2-printer 'js2-print-extern-binding)
 (js2--struct-put 'js2-export-binding-node 'js2-visitor 'js2-visit-extern-binding)
@@ -2774,12 +2776,15 @@ different, visit the extern-name."
 'foo as bar'."
   (let ((local-name (js2-export-binding-node-local-name n))
         (extern-name (js2-export-binding-node-extern-name n))
-        (kind (js2-export-binding-node-kind n)))
+        (kind (js2-export-binding-node-kind n))
+        (ta (js2-export-binding-node-type-annotation n)))
     (when kind
       (insert (cond
                ((= (js2-token-type kind) js2-TYPEOF) "typeof ")
                ((= (js2-token-type kind) js2-TYPE) "type "))))
     (insert (js2-name-node-name extern-name))
+    (when ta
+      (js2-print-ast ta 0))
     (when (not (equal local-name extern-name))
       (insert " as ")
       (insert (js2-name-node-name local-name)))))
@@ -9716,6 +9721,7 @@ imports or a namespace import that follows it.
             (when name-node
               (js2-define-symbol
                js2-LET (js2-name-node-name name-node) name-node t))))))
+     ;; TODO: remove js2-TYPE token
      ((or (= (js2-peek-token) js2-NAME)
           (= (js2-peek-token) js2-TYPEOF)
           (= (js2-peek-token) js2-TYPE))
@@ -9883,6 +9889,10 @@ consumes no tokens."
             (if import-p
                 (js2-set-face (js2-current-token-beg) (js2-current-token-end)
                               'font-lock-variable-name-face 'record))
+            ;; parse walk style import, e.g. import { a: T }
+            (when (= (js2-peek-token) js2-COLON)
+              (setf (js2-export-binding-node-type-annotation node)
+                    (js2-parse-type-annotation)))
             node))
       nil)))
 
