@@ -1062,3 +1062,6 @@ switch (a) {
 case b:
   break;
 }")
+
+(js2-deftest-parse object-method-with-type-params
+  "var a = {b<c>() {}};")
