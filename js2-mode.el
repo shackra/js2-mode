@@ -12973,18 +12973,21 @@ TODO: free semi supports."
   (let ((pos (js2-current-token-beg))
         (_ (js2-must-match-name "msg.unnamed.type.alias.decl"))
         (name (js2-create-name-node t))
-        type-params)
+        type-params node)
     (js2-set-face (js2-node-pos name) (js2-node-end name)
                   'font-lock-function-name-face 'record)
     ;; parse type params after name, e.g. type a<T>
     (when (= (js2-peek-token) js2-LT)
       (setq type-params (js2-parse-type-params)))
     (js2-must-match js2-ASSIGN "msg.syntax")
+    (setq js2-in-type t
+          node (js2-create-type-node t)
+          js2-in-type nil)
     (make-js2-type-alias-node :pos pos
                               :len (- (js2-current-token-end) pos)
                               :name name
                               :type-params type-params
-                              :bindings (js2-create-type-node t))))
+                              :bindings node)))
 
 (defun js2-parse-opaque-type-alias ()
   "Parse type alias declatation, e.g. opaque type a<b> = c"
