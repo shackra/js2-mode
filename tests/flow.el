@@ -674,6 +674,9 @@ the test."
 (js2-deftest-parse function-stmt-return-type
   "function a(): b {\n}")
 
+(js2-deftest-parse function-stmt-return-type-2
+  "function a(): b<c<d<e>>> {\n}")
+
 (js2-deftest-parse function-expr-return-type
   "var a = function(): b {};")
 
