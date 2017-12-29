@@ -9407,9 +9407,11 @@ Last token scanned is the close-curly for the function body."
       (when (js2-match-token js2-COLON)
         (if (js2-match-token js2-CHECKS)      ; match (): %checks no return type
             (setf (js2-function-node-predicate fn-node) t)
-          (setq js2-in-function t)            ; match (): T
+          (setq js2-in-function t             ; match (): T
+                js2-in-type t)
           (setf (js2-function-node-return-type fn-node) (js2-create-type-node))
-          (setq js2-in-function nil)
+          (setq js2-in-function nil
+                js2-in-type nil)
           (when (js2-match-token js2-CHECKS)  ; match (): T %checks
             (setf (js2-function-node-predicate fn-node) t))
           (when (and (eq function-type 'FUNCTION_ARROW)
