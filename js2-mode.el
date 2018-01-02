@@ -9407,9 +9407,11 @@ Last token scanned is the close-curly for the function body."
       (when (js2-match-token js2-COLON)
         (if (js2-match-token js2-CHECKS)      ; match (): %checks no return type
             (setf (js2-function-node-predicate fn-node) t)
-          (setq js2-in-function t)            ; match (): T
+          (setq js2-in-function t             ; match (): T
+                js2-in-type t)
           (setf (js2-function-node-return-type fn-node) (js2-create-type-node))
-          (setq js2-in-function nil)
+          (setq js2-in-function nil
+                js2-in-type nil)
           (when (js2-match-token js2-CHECKS)  ; match (): T %checks
             (setf (js2-function-node-predicate fn-node) t))
           (when (and (eq function-type 'FUNCTION_ARROW)
@@ -12170,8 +12172,8 @@ When `js2-is-in-destructuring' is t, forms like {a, b, c} will be permitted."
                (= (js2-peek-token) js2-COLON))
       (js2-node-set-prop key :type-annotation (js2-parse-type-annotation)))
     ;; parse type params for class method prop
-    (when (and class-p
-               (= (js2-peek-token) js2-LT))
+    ;; TODO(rabbit): object method also has this feature
+    (when (= (js2-peek-token) js2-LT)
       (setq type-params (js2-parse-type-params)))
     (cond
      ;; method definition: {f() {...}}
