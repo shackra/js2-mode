@@ -1066,5 +1066,20 @@ case b:
   break;
 }")
 
+
+;;; Babylon plugins and Stage-0
+
+(js2-deftest-parse dynamic-import
+  "import('foo')")
+
+(js2-deftest-parse dynamic-import-with-expr
+  "import(foo + 2)")
+
+(js2-deftest-parse dynamic-import-chain-then
+  "import(foo + 2).then()")
+
+;; (js2-deftest-parse dynamic-import-with-comments
+;;   "import(/* comment */ foo + 2)")
+
 (js2-deftest-parse object-method-with-type-params
   "var a = {b<c>() {}};")
