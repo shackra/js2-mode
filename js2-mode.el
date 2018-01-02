@@ -9659,6 +9659,13 @@ Return value is a list (EXPR LP RP), with absolute paren positions."
 
 (defun js2-parse-import ()
   "Parse import statement. The current token must be js2-IMPORT."
+  (if (= (js2-peek-token) js2-LP)
+      (let ((target (make-js2-name-node
+                     :pos (js2-current-token-beg)
+                     :len (- (js2-current-token-end)
+                             (js2-current-token-beg))
+                     :name "import")))
+        (js2-parse-member-expr t target))
   (unless (js2-ast-root-p js2-current-scope)
     (js2-report-error "msg.mod.import.decl.at.top.level"))
   (let ((beg (js2-current-token-beg))
@@ -9683,7 +9690,7 @@ Return value is a list (EXPR LP RP), with absolute paren positions."
                (js2-node-add-children node import-clause))
              (when from-clause
                (js2-node-add-children node from-clause))
-             node)))))
+             node))))))
 
 (defun js2-parse-import-clause (&optional kind)
   "Parse the bindings in an import statement.
@@ -11301,11 +11308,11 @@ Returns the list in reverse order.  Consumes the right-paren token."
       (js2-must-match js2-RP "msg.no.paren.arg")
       result)))
 
-(defun js2-parse-member-expr (&optional allow-call-syntax)
+(defun js2-parse-member-expr (&optional allow-call-syntax kwd-pn)
   (let ((tt (js2-current-token-type))
         pn pos target args beg end init)
     (if (/= tt js2-NEW)
-        (setq pn (js2-parse-primary-expr))
+        (setq pn (if kwd-pn kwd-pn (js2-parse-primary-expr)))
       ;; parse a 'new' expression
       (js2-get-token)
       (setq pos (js2-current-token-beg)
@@ -12496,7 +12503,6 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
                                          :value (js2-current-token-string)
                                          :negative-p nil))
      ((= tt js2-STRING)
-      (print tt)
       (make-js2-literal-string-type-node :len (- (js2-current-token-end) beg)
                                          :value (js2-current-token-string)))
      ((or (= tt js2-TRUE)
