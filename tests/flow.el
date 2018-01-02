@@ -1066,6 +1066,8 @@ case b:
   break;
 }")
 
+(js2-deftest-parse object-method-with-type-params
+  "var a = {b<c>() {}};")
 
 ;;; Babylon plugins and Stage-0
 
@@ -1081,5 +1083,17 @@ case b:
 ;; (js2-deftest-parse dynamic-import-with-comments
 ;;   "import(/* comment */ foo + 2)")
 
-(js2-deftest-parse object-method-with-type-params
-  "var a = {b<c>() {}};")
+
+;;; Walt
+
+(js2-deftest-parse walt-buildin-type
+  "var a: i32;")
+
+(js2-deftest-parse walt-buildin-type-2
+  "var a: i64;")
+
+(js2-deftest-parse walt-buildin-type-3
+  "var a: f32;")
+
+(js2-deftest-parse walt-buildin-type-4
+  "var a: f64;")

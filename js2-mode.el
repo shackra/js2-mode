@@ -5011,14 +5011,19 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
                (:include js2-node)
                (:constructor make-js2-number-type-node (&key (type js2-NAME)
                                                              (pos js2-ts-cursor)
-                                                             (len (string-width "number")))))
-  "AST node for number primitive type.")
+                                                             (len (string-width "number"))
+                                                             name)))
+  "AST node for number primitive type."
+  name)
 
 (js2--struct-put 'js2-number-type-node 'js2-visitor 'js2-visit-none)
 (js2--struct-put 'js2-number-type-node 'js2-printer 'js2-print-number-type-node)
 
 (defun js2-print-number-type-node (n i)
-  (insert "number"))
+  (let ((name (js2-number-type-node-name n)))
+    (if (not name)
+        (insert "number")
+      (insert name))))
 
 (cl-defstruct (js2-string-type-node
                (:include js2-node)
@@ -12551,6 +12556,14 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
       (setq node (make-js2-undefined-type-node)))
      ((string= name "empty")
       (setq node (make-js2-empty-type-node)))
+     ;; walt build in types, i32, i64, f32, f64
+     ((or (string= name "i32")
+          (string= name "i64")
+          (string= name "f32")
+          (string= name "f64")
+          (string= name "Memory"))
+      (setq node (make-js2-number-type-node :name name
+                                            :len (string-width name))))
      ;; parse generic type
      (t
       (js2-unget-token)
