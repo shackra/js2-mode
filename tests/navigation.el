@@ -58,3 +58,9 @@
 
 (ert-deftest js2-jump-to-property-object-property ()
   (js2-navigation-helper "aObject.value = {prop:1};aObject.value.prop" 18))
+
+(ert-deftest js2-jump-to-object-method ()
+  (js2-navigation-helper "var foo={bar(){},baz(){foo.bar()}};" 10 8))
+
+(ert-deftest js2-jump-to-class-this-on-property ()
+  (js2-navigation-helper "class Foo {bar; baz(){this.bar()}};" 12 8))
