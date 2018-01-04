@@ -12187,7 +12187,7 @@ When `js2-is-in-destructuring' is t, forms like {a, b, c} will be permitted."
     ;; parse type params for class method prop
     ;; TODO(rabbit): object method also has this feature
     (when (= (js2-peek-token) js2-LT)
-      (setq type-params (js2-parse-type-params)))
+      (setq type-params (js2-parse-type-params t)))
     (cond
      ;; method definition: {f() {...}}
      ((and (= (js2-peek-token) js2-LP)
