@@ -945,10 +945,10 @@ the test."
 (js2-deftest-parse export-type-named
   "export type {type} from 'm';")
 
-(js2-deftest-parse export-type-named
+(js2-deftest-parse export-type-named-2
   "export type { type type } from 'm';"
   :syntax-error "type"
-  :errors-count 7)
+  :errors-count 4)
 
 ;; Interface
 
@@ -1047,17 +1047,17 @@ the test."
 
 ;;; Conflicts
 
-;; (js2-deftest-parse type-as-variable-name
-;;   "const type = 42;")
+(js2-deftest-parse type-as-variable-name
+  "const type = 42;")
 
-;; (js2-deftest-parse opaque-as-variable-name
-;;   "const opaque = 42;")
+(js2-deftest-parse opaque-as-variable-name
+  "const opaque = 42;")
 
-;; (js2-deftest-parse type-as-caller-argument
-;;   "func(type, type.a);")
+(js2-deftest-parse type-as-caller-argument
+  "func(type, type.a);")
 
-;; (js2-deftest-parse type-as-caller-argument
-;;   "type => { return type };")
+(js2-deftest-parse type-as-caller-argument-2
+  "(type) => {  return type;\n};")
 
 (js2-deftest-parse switch-case-colon
   "\
