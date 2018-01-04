@@ -2781,7 +2781,7 @@ different, visit the extern-name."
     (when kind
       (insert (cond
                ((= (js2-token-type kind) js2-TYPEOF) "typeof ")
-               ((= (js2-token-type kind) js2-TYPE) "type "))))
+               ((= (js2-token-type kind) js2-NAME) "type "))))
     (insert (js2-name-node-name extern-name))
     (when ta
       (js2-print-ast ta 0))
@@ -2830,7 +2830,7 @@ import ImportClause FromClause;"
     (when kind
       (insert (cond
                ((= (js2-token-type kind) js2-TYPEOF) "typeof ")
-               ((= (js2-token-type kind) js2-TYPE) "type "))))
+               ((= (js2-token-type kind) js2-NAME) "type "))))
     (if import-clause
         (progn
           (js2-print-import-clause import-clause)
@@ -4848,8 +4848,7 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
       (when params
         (insert ", "))
       (insert "...")
-      (js2-print-ast rest 0)
-      )
+      (js2-print-ast rest 0))
     (when (not free-p)
       (insert ")"))
     (if method-p
@@ -4905,8 +4904,9 @@ For a simple name, the kids list has exactly one node, a `js2-name-node'."
   (let* ((trailing (js2-object-type-node-trailing n))
          (ps (js2-object-type-node-properties n))
          (delimiter (js2-object-type-node-delimiter n))
-         (beg-delim (if (= delimiter js2-LCB) "{|" "{"))
-         (end-delim (if (= delimiter js2-LCB) "|}" "}"))
+         (delims (if (= delimiter js2-LCB) '("{|" "|}") '("{" "}")))
+         (beg-delim (car delims))
+         (end-delim (cadr delims))
          (ends-with (js2-object-type-node-ends-with n))
          (eol (if (= ends-with js2-SEMI) ";" ",")))
     (insert beg-delim)
@@ -6052,10 +6052,7 @@ You should use `js2-print-tree' instead of this function."
                       js2-WITH
                       js2-WITHEXPR
                       js2-YIELD
-                      js2-INTERFACE
-                      js2-DECLARE
-                      js2-TYPE
-                      js2-OPAQUE))
+                      js2-INTERFACE))
       (aset tokens tt t))
     tokens))
 
@@ -6644,7 +6641,7 @@ into temp buffers."
     var void
     while with
     yield
-    type interface implements opaque declare %checks)) ; flow keywords
+    interface implements %checks)) ; flow keywords
 
 ;; Token names aren't exactly the same as the keywords, unfortunately.
 ;; E.g. delete is js2-DELPROP.
@@ -6666,7 +6663,7 @@ into temp buffers."
                js2-VAR
                js2-WHILE js2-WITH
                js2-YIELD
-               js2-TYPE js2-IMPLEMENTS js2-INTERFACE js2-DECLARE js2-OPAQUE)))
+               js2-IMPLEMENTS js2-INTERFACE)))
     (dolist (i tokens)
       (aset table i 'font-lock-keyword-face))
     (aset table js2-STRING 'font-lock-string-face)
@@ -7846,7 +7843,9 @@ of a simple name.  Called before EXPR has a parent node."
              "yields"
              "type"
              "throw"
-             "throws"))
+             "throws"
+
+             "flow"))
           "\\)\\)\\s-*\\({[^}]+}\\)?")
   "Matches jsdoc tags with optional type.")
 
@@ -8938,11 +8937,6 @@ Returns t on match, nil if no match."
     nil))
 
 (defun js2-must-match-name (msg-id)
-  ;; TODO(Rabbit): the flow keywords `type`, `opaque`, `declare`
-  ;; should allow as a name.
-  ;; (or (js2-match-token js2-TYPE)
-  ;;     (js2-match-token js2-OPAQUE)
-  ;;     (js2-match-token js2-DECLARE))
   (if (js2-match-token js2-NAME t)
       t
     (if (eq (js2-current-token-type) js2-RESERVED)
@@ -9517,7 +9511,7 @@ node are given relative start positions and correct lengths."
 ;; These correspond to the switch cases in Parser.statementHelper
 (defconst js2-parsers
   (let ((parsers (make-vector js2-num-tokens
-                                #'js2-parse-expr-stmt)))
+                              #'js2-parse-expr-stmt)))
     (aset parsers js2-BREAK     #'js2-parse-break)
     (aset parsers js2-CLASS     #'js2-parse-class-stmt)
     (aset parsers js2-CONST     #'js2-parse-const-var)
@@ -9543,9 +9537,9 @@ node are given relative start positions and correct lengths."
     (aset parsers js2-WITH      #'js2-parse-with)
     (aset parsers js2-YIELD     #'js2-parse-ret-yield)
     (aset parsers js2-INTERFACE #'js2-parse-interface)
-    (aset parsers js2-TYPE      #'js2-parse-type-alias)
-    (aset parsers js2-OPAQUE    #'js2-parse-opaque-type-alias)
-    (aset parsers js2-DECLARE   #'js2-parse-declare)
+    ;; (aset parsers js2-TYPE      #'js2-parse-type-alias)
+    ;; (aset parsers js2-OPAQUE    #'js2-parse-opaque-type-alias)
+    ;; (aset parsers js2-DECLARE   #'js2-parse-declare)
     parsers)
   "A vector mapping token types to parser functions.")
 
@@ -9665,8 +9659,9 @@ Return value is a list (EXPR LP RP), with absolute paren positions."
     pn))
 
 (defun js2-parse-import ()
-  "Parse import statement. The current token must be js2-IMPORT."
-  (if (= (js2-peek-token) js2-LP)
+  "Parse import statement. The current token must be js2-IMPORT.
+Support dynamic import sytnax, e.g. `import('foo')`."
+  (if (= (js2-peek-token) js2-LP)       ; match import(
       (let ((target (make-js2-name-node
                      :pos (js2-current-token-beg)
                      :len (- (js2-current-token-end)
@@ -9738,7 +9733,8 @@ imports or a namespace import that follows it.
      ;; TODO: remove js2-TYPE token
      ((or (= (js2-peek-token) js2-NAME)
           (= (js2-peek-token) js2-TYPEOF)
-          (= (js2-peek-token) js2-TYPE))
+          ;; (= (js2-peek-token) js2-TYPE)
+          )
       (let ((binding (js2-maybe-parse-export-binding t kind)))
         (let ((node-name (js2-export-binding-node-local-name binding)))
           (js2-define-symbol js2-LET (js2-name-node-name node-name) node-name t))
@@ -9842,28 +9838,27 @@ consumes no tokens."
   (let ((kind (when import-p (js2-parse-module-kind)))
         (extern-name (cond
                       ((js2-match-token js2-TYPEOF) "typeof")
-                      ((js2-match-token js2-TYPE) "type")
+                      ((js2-match-contextual-kwd "type") "type")
                       ((js2-match-prop-name) (js2-current-token-string))
                       (t nil)))
         (beg (js2-current-token-beg))
         (extern-name-len (js2-current-token-len))
         (is-reserved-name (and (not (or (= (js2-current-token-type) js2-TYPEOF)
-                                        (= (js2-current-token-type) js2-TYPE)))
+                                        (and (= (js2-current-token-type) js2-NAME)
+                                             (string= (js2-current-token-string) "type"))))
                                (or (= (js2-current-token-type) js2-RESERVED)
                                    (aref js2-kwd-tokens (js2-current-token-type))))))
     (when (and decl-kind kind)
       (let ((beg (js2-token-beg decl-kind))
             (end (js2-token-end decl-kind)))
-        ;; TODO error msg
+        ;; TODO(Rabbit): error msg
         (js2-report-error "msg.syntax" nil beg (- end beg))))
     (if extern-name
         (if (js2-match-contextual-kwd "as")
-            (let ((name
-                   (or
-                    (and (js2-match-token js2-DEFAULT) "default")
-                    (and (js2-match-token js2-TYPE) "type")
-                    (and (js2-match-token js2-TYPEOF) "typeof")
-                    (and (js2-match-token js2-NAME) (js2-current-token-string)))))
+            (let ((name (or (and (js2-match-token js2-DEFAULT) "default")
+                            (and (js2-match-contextual-kwd "type") "type")
+                            (and (js2-match-token js2-TYPEOF) "typeof")
+                            (and (js2-match-token js2-NAME) (js2-current-token-string)))))
               (if name
                   (let ((node (make-js2-export-binding-node
                                :pos beg
@@ -9904,7 +9899,7 @@ consumes no tokens."
                 (js2-set-face (js2-current-token-beg) (js2-current-token-end)
                               'font-lock-variable-name-face 'record))
             ;; parse walk style import, e.g. import { a: T }
-            (when (= (js2-peek-token) js2-COLON)
+            (when (= (js2-peek-token) js2-COLON) ; match a:
               (setf (js2-export-binding-node-type-annotation node)
                     (js2-parse-type-annotation)))
             node))
@@ -10028,7 +10023,7 @@ invalid export statements."
         type-export)
     (cond
      ((and (not kind)
-           (js2-match-token js2-TYPE))   ; match export type
+           (js2-match-contextual-kwd "type"))   ; match export type
       (cond
        ((or (= (js2-peek-token) js2-MUL) ; match 'export *'
             (= (js2-peek-token) js2-LC)) ; match 'export {'
@@ -10070,14 +10065,14 @@ invalid export statements."
       (setq declaration (js2-parse-class-stmt)))
      ((js2-match-token js2-INTERFACE)
       (setq declaration (js2-parse-interface)))
-     ((js2-match-token js2-OPAQUE)
-      (setq declaration (js2-parse-opaque-type-alias)))
      ((js2-match-token js2-NAME)
-      (setq declaration
-            (if (js2-match-async-function)
-                (js2-parse-async-function-stmt)
-              (js2-unget-token)
-              (js2-parse-expr))))
+      (if (string= (js2-current-token-string) "opaque")
+          (setq declaration (js2-parse-opaque-type-alias))
+        (setq declaration
+              (if (js2-match-async-function)
+                  (js2-parse-async-function-stmt)
+                (js2-unget-token)
+                (js2-parse-expr)))))
      ((js2-match-token js2-FUNCTION)
       (setq declaration (js2-parse-function-stmt)))
      (t
@@ -10600,38 +10595,51 @@ Called when we found a name in a statement context.  If it's a label, we gather
 up any following labels and the next non-label statement into a
 `js2-labeled-stmt-node' bundle and return that.  Otherwise we parse an
 expression and return it wrapped in a `js2-expr-stmt-node'."
-  (let ((pos (js2-current-token-beg))
-        expr stmt bundle
-        (continue t))
-    ;; set check for label and call down to `js2-parse-primary-expr'
-    (setq expr (js2-maybe-parse-label))
-    (if (null expr)
-        ;; Parse the non-label expression and wrap with expression stmt.
-        (js2-wrap-with-expr-stmt pos (js2-parse-expr) t)
-      ;; else parsed a label
-      (setq bundle (make-js2-labeled-stmt-node :pos pos))
-      (js2-record-label expr bundle)
-      ;; look for more labels
-      (while (and continue (= (js2-get-token) js2-NAME))
-        (if (setq expr (js2-maybe-parse-label))
-            (js2-record-label expr bundle)
-          (setq expr (js2-parse-expr)
-                stmt (js2-wrap-with-expr-stmt (js2-node-pos expr) expr t)
-                continue nil)
-          (js2-auto-insert-semicolon stmt)))
-      ;; no more labels; now parse the labeled statement
-      (unwind-protect
-            (unless stmt
-              (let ((js2-labeled-stmt bundle))  ; bind dynamically
-                (js2-unget-token)
-                (setq stmt (js2-statement-helper))))
-        ;; remove the labels for this statement from the global set
-        (dolist (label (js2-labeled-stmt-node-labels bundle))
-          (setq js2-label-set (remove label js2-label-set))))
-      (setf (js2-labeled-stmt-node-stmt bundle) stmt
-            (js2-node-len bundle) (- (js2-node-end stmt) pos))
-      (js2-node-add-children bundle stmt)
-      bundle)))
+  (let ((name-str (js2-current-token-string)))
+    (cond
+     ((and (string= name-str "type")
+           (= (js2-peek-token) js2-NAME))
+      (js2-parse-type-alias))
+     ((and (string= name-str "opaque")
+           (= (js2-peek-token) js2-NAME))
+      (js2-parse-opaque-type-alias))
+     ((and (string= name-str "declare")
+           (= (js2-peek-token) js2-NAME))
+      (js2-parse-declare))
+     (t
+      (let ((pos (js2-current-token-beg))
+            expr stmt bundle
+            (continue t))
+        ;; set check for label and call down to `js2-parse-primary-expr'
+        (setq expr (js2-maybe-parse-label))
+        (if (null expr)
+            ;; Parse the non-label expression and wrap with expression stmt.
+            (js2-wrap-with-expr-stmt pos (js2-parse-expr) t)
+          ;; else parsed a label
+          (setq bundle (make-js2-labeled-stmt-node :pos pos))
+          (js2-record-label expr bundle)
+          ;; look for more labels
+          (while (and continue (= (js2-get-token) js2-NAME))
+            (if (setq expr (js2-maybe-parse-label))
+                (js2-record-label expr bundle)
+              (setq expr (js2-parse-expr)
+                    stmt (js2-wrap-with-expr-stmt (js2-node-pos expr) expr t)
+                    continue nil)
+              (js2-auto-insert-semicolon stmt)))
+          ;; no more labels; now parse the labeled statement
+          (unwind-protect
+              (unless stmt
+                (let ((js2-labeled-stmt bundle))  ; bind dynamically
+                  (js2-unget-token)
+                  (setq stmt (js2-statement-helper))))
+            ;; remove the labels for this statement from the global set
+            (dolist (label (js2-labeled-stmt-node-labels bundle))
+              (setq js2-label-set (remove label js2-label-set))))
+          (setf (js2-labeled-stmt-node-stmt bundle) stmt
+                (js2-node-len bundle) (- (js2-node-end stmt) pos))
+          (js2-node-add-children bundle stmt)
+          bundle)))
+     )))
 
 (defun js2-maybe-parse-label ()
   (cl-assert (= (js2-current-token-type) js2-NAME))
@@ -12938,7 +12946,7 @@ TODO: free semi supports."
   "Parse import decl kind, e.g. import type a from 'm'"
   (let ((kind (cond
                ((js2-match-token js2-TYPEOF) "typeof")
-               ((js2-match-token js2-TYPE) "type")
+               ((js2-match-contextual-kwd "type") "type")
                (t nil)))
         (curr-tt (js2-current-token)))
     (when kind
@@ -13023,7 +13031,7 @@ TODO: free semi supports."
 (defun js2-parse-opaque-type-alias ()
   "Parse type alias declatation, e.g. opaque type a<b> = c"
   (let ((pos (js2-current-token-beg))
-        (_ (js2-must-match js2-TYPE "msg.syntax"))
+        (_ (js2-match-contextual-kwd "type"))
         (_ (js2-must-match-name "msg.unnamed.type.alias.decl"))
         (name (js2-create-name-node t))
         type-params subtyping)
