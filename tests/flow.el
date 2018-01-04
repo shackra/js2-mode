@@ -853,6 +853,11 @@ the test."
   b<c>(d: e): f {}
 }")
 
+(js2-deftest-parse class-method-type-with-named-type-params
+  "class a {
+  b<c: d>(e: f): g {}
+}")
+
 (js2-deftest-parse class-method-type-getset
   "class a {
   get a(b: c): d {}
