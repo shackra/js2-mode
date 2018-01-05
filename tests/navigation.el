@@ -64,3 +64,6 @@
 
 (ert-deftest js2-jump-to-class-this-on-property ()
   (js2-navigation-helper "class Foo {bar; baz(){this.bar()}};" 12 8))
+
+(ert-deftest js2-jump-to-object-prop-assigned ()
+  (js2-navigation-helper "var foo={bar:42};var baz=foo;baz.bar" 9))
