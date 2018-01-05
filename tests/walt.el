@@ -133,3 +133,17 @@ the test."
 
 (js2-deftest-parse walt-import
   "import {a: b} from 'm';")
+
+;; Buildin Types
+
+(js2-deftest-parse walt-buildin-type
+  "var a: i32;")
+
+(js2-deftest-parse walt-buildin-type-2
+  "var a: i64;")
+
+(js2-deftest-parse walt-buildin-type-3
+  "var a: f32;")
+
+(js2-deftest-parse walt-buildin-type-4
+  "var a: f64;")
