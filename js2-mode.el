@@ -14810,8 +14810,63 @@ and variables NAMES will contain one element."
   "Find scope for NAME from NODE."
   (let ((scope (js2-get-defining-scope
           (or (js2-node-get-enclosing-scope node)
-             node) name)))
+	      node)
+	  name)))
     (if scope (js2-symbol-ast-node (js2-scope-get-symbol scope name)))))
+
+(defun pl-js2-find-symbol-rec (cur-node names)
+  (if (not names)
+      cur-node ;; todo: from right to left
+    (let ((value (pl-js2-find-symbol cur-node names)))
+      (if (not value)
+	  '()
+	(when (js2-object-node-p value)
+	  (setq value (pl-js2-search-object-rec value names)))
+	(when (or (js2-name-node-p value) (js2-prop-get-node-p value) (js2-elem-get-node-p value))
+	  (pl-js2-find-symbol-rec value (pl-js2-prefix-names value names)))))))
+      
+(defun pl-js2-prefix-names (prefix names)
+  (concat (js2-compute-nested-prop-get prefix) names))
+	    
+
+(defun pl-js2-search-object-rec (object-node names)
+  (if (not names) object-node
+    (let ((value (js2-search-object object-node (pop names))))
+      (if (not value) '()
+	(if (not (js2-object-node-p value)) value
+	  (pl-js2-search-object-rec value names))))))
+	  
+	     
+
+(defun pl-js2-find-symbol (cur-node names)
+  ;; find last node we care ( left is subset of names )
+  (let (care-names-node)
+    (js2-visit-ast
+     (pl-scope-of-name cur-node)
+     (lambda (node endp)
+       (when (and (not endp) (< (js2-node-abs-pos node) (js2-node-abs-pos cur-node)))
+	 (let (left right)
+	   (cond ((js2-assign-node-p node)
+		  (setq left (js2-assign-node-left node)
+			right (js2-assign-node-right node)))
+		 ((js2-var-init-node-p node)
+		  (setq left (js2-var-init-node-target)
+			right (js2-var-init-node-initializer))))
+	   (let ((left-names (js2-compute-nested-prop-get left)))
+	     (if (pl-js2-name-subset-p left-names names)
+		 (setq care-names-node (list left-names right)))))
+	 tt)))
+    (setq names (nth (legth (car care-names-node)) names))
+    (cadr care-names-node)))
+
+(defun pl-scope-of-name (node name)
+  (js2-name-node-scope node))
+(defun pl-js2-name-subset-p (s l)
+  (let ((ss s) (ll l))
+    (while (and ss ll (string= (js2-name-node-name (car ss)) (js2-name-node-name (car ll))))
+      (setq ss (cdr ss) ll (cdr ll)))
+    (not ss)))
+
 
 (provide 'js2-mode)
 
