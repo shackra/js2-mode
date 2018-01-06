@@ -1096,3 +1096,9 @@ case b:
 
 (js2-deftest-parse throw-expr-arrow-function
   "() => {  throw new Error();\n};")
+
+
+;;; Decorators
+
+(js2-deftest-parse class-stmt-decorators
+  "@a class b {\n}")
