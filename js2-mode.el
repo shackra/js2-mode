@@ -14748,79 +14748,12 @@ it marks the next defun after the ones already marked."
                                 (js2-string-node-value left))))
            return elem))
 
-(defun js2-search-object-for-prop (object prop-names)
-  "Return node in OBJECT that matches PROP-NAMES or nil.
-PROP-NAMES is a list of values representing a path to a value in OBJECT.
-i.e. ('name' 'value') = {name : { value: 3}}"
-  (let (node
-        (temp-object object)
-        (temp t) ;temporay node
-        (names prop-names))
-    (while (and temp names (js2-object-node-p temp-object))
-      (setq temp (js2-search-object temp-object (pop names)))
-      (and (setq node temp)
-         (setq temp-object (js2-object-prop-node-right temp))))
-    (unless names node)))
-
-(defun js2-search-scope-old (node names)
-  "Searches NODE scope for jump location matching NAMES.
-NAMES is a list of property values to search for. For functions
-and variables NAMES will contain one element."
-  (let (node-init
-        (val (js2-name-node-name (car names))))
-    (setq node-init (js2-get-symbol-declaration node val))
-
-    (when (> (length names) 1)
-
-      ;; Check var declarations
-      (when (and node-init (string= val (js2-name-node-name node-init)))
-        (let ((parent (js2-node-parent node-init))
-              (temp-names names))
-          (pop temp-names) ;; First element is var name
-          (setq node-init (when (js2-var-init-node-p parent)
-                            (js2-search-object-for-prop
-                             (js2-var-init-node-initializer parent)
-                             temp-names)))))
-
-      ;; Check all assign nodes
-      (js2-visit-ast
-       js2-mode-ast
-       (lambda (node endp)
-         (unless endp
-           (if (js2-assign-node-p node)
-               (let ((left (js2-assign-node-left node))
-                     (right (js2-assign-node-right node))
-                     (temp-names names))
-                 (when (js2-prop-get-node-p left)
-                   (let* ((prop-list (js2-compute-nested-prop-get left))
-                          (found (cl-loop for prop in prop-list
-                                          until (not (string= (js2-name-node-name
-                                                               (pop temp-names))
-                                                              (js2-name-node-name prop)))
-                                          if (not temp-names) return prop))
-                          (found-node (or found
-                                          (when (js2-object-node-p right)
-                                            (js2-search-object-for-prop right
-                                                                        temp-names)))))
-                     (if found-node (push found-node node-init))))))
-           t))))
-    node-init))
-
-(defun js2-get-symbol-declaration (node name)
-  "Find scope for NAME from NODE."
-  (let ((scope (js2-get-defining-scope
-          (or (js2-node-get-enclosing-scope node)
-	      node)
-	  name)))
-    (if scope (js2-symbol-ast-node (js2-scope-get-symbol scope name)))))
-
 (defun js2-search-scope (cur-node names)
-  (pl-js2-find-symbol-rec cur-node names))
-(defun pl-js2-find-symbol-rec (cur-node names)
+  (js2-find-definition-rec cur-node names))
+(defun js2-find-definition-rec (cur-node names) ;; todo change name
   (if (not names)
       (if (not cur-node) nil
 	(let ((parent (js2-node-parent cur-node)))
-;;	(print "parent") (print (js2-node-string parent))
 	  (cond ((js2-var-init-node-p parent)
 		 (js2-var-init-node-target parent))
 		((js2-assign-node-p parent)
@@ -14828,18 +14761,14 @@ and variables NAMES will contain one element."
 		((js2-object-prop-node-p parent)
 		 (js2-object-prop-node-left parent))
 		(t cur-node)))) ;;from right to left
-    
-;;    (print "cur-node-:") (print (and cur-node (js2-node-string cur-node)))
-;;    (print "names-:")  (mapc (lambda (x) (print (js2-node-string x))) names)
-    (let* ((value-names (pl-js2-find-symbol cur-node names))
+
+    (let* ((value-names (js2-find-definition cur-node names))
 	   (value (car value-names))
 	   (names (cadr value-names)))
-;;      (print "value.:") (print (and value (js2-node-string value))) (print (js2-node-type (js2-node-parent value)))
-;;      (print "names.:")  (mapc (lambda (x) (print (js2-node-string x))) names) (print (not names))
 	  
       (when (and value names)
 	(when (js2-object-node-p value)
-	  (let ((value-names (pl-js2-search-object-rec value names)))
+	  (let ((value-names (js2-search-object-rec value names)))
 	    (setq value (car value-names)
 		  names (cadr value-names))))
 	(when (or
@@ -14847,45 +14776,29 @@ and variables NAMES will contain one element."
 		    (not (js2-function-node-p (js2-name-node-parent value)))) ;; not trace function arg
 	       (js2-prop-get-node-p value)
 	       (js2-elem-get-node-p value))
-	  (setq names (pl-js2-prefix-names value names)))
-;;	(print "value+:") (print (js2-node-string value))
-;;	(print "names+:")  (mapc (lambda (x) (print (js2-node-string x))) names)
-	)
-;;      (print "value++:") (print (and value (js2-node-string value)))
-      ;;      (print "names++:")  (mapc (lambda (x) (print (js2-node-string x))) names) (print "++")
-      (pl-js2-find-symbol-rec value names))))
+	  (setq names (js2-compute-names-add-prefix value names))))
+      (js2-find-definition-rec value names))))
 
-(defun pl-js2-prefix-names (prefix names)
-;;  (print "prefix:") (print (js2-node-string prefix))
-;;  (print "compute prop:") (mapc (lambda (x) (print (js2-node-string x))) (js2-compute-nested-prop-get prefix))
-;;  (print "names:")  (mapc (lambda (x) (print (js2-node-string x))) names)
+(defun js2-compute-names-add-prefix (prefix names)
   (append (js2-compute-nested-prop-get prefix) names))
-	    
 
-(defun pl-js2-search-object-rec (object-node names)
+(defun js2-search-object-rec (object-node names)
   (if (not names) object-node
     (let ((value (js2-object-prop-node-right (js2-search-object object-node (pop names)))))
       (when value
 	(if (not (js2-object-node-p value)) (list value names)
-	  (pl-js2-search-object-rec value names))))))
-	  
-	     
+	  (js2-search-object-rec value names))))))
 
-(defun pl-js2-find-symbol (cur-node names)
+(defun js2-find-definition (cur-node names)
   ;; find last node we care ( left is subset of names )
   (let ((care-node-names (list nil nil))
-	(scope (pl-scope-of-node cur-node)))
-;;    (print "scope: ") (print (and scope (js2-node-string scope)))
+	(scope (js2-compute-scope-of-node cur-node)))
     (if (not scope)
 	(list nil nil)
-;;      (print "find symbol in: ") (print (js2-node-string cur-node)) (print (js2-node-string (pl-scope-of-node cur-node))) (print "::")
       (js2-visit-ast
        scope
        (lambda (node endp)
-;;	 (print "visit: ")  (print (js2-node-type node)) (print (js2-node-string node))
-;;	 (print "ass-p: ") (print (js2-assign-node-p node)) (print (js2-node-abs-pos node)) (print (js2-node-abs-pos cur-node))
 	 (when (and (not endp) (< (js2-node-abs-pos node) (js2-node-abs-pos cur-node)))
-;;	   (print "visit i ")
 	   (let (left right)
 	     (cond ((js2-assign-node-p node)
 		    (setq left (js2-assign-node-left node)
@@ -14902,33 +14815,19 @@ and variables NAMES will contain one element."
 		    ((js2-function-node-p node)
 		     (setq left (js2-function-node-name node)
 			   right node)))
-	     ;;	   (print (and left right))
 	     (when (and left)
-	       ;;	     (print "visite: ") (print (js2-node-string node))
 	       (let ((left-names (and left (js2-compute-nested-prop-get left))))
-;;		 (print "left-names:")  (mapc (lambda (x) (print (js2-node-string x))) left-names)
-		 ;;    (print "names:")  (mapc (lambda (x) (print (js2-node-string x))) names)
-		 ;;   (print "subset-p") (print (pl-js2-name-subset-p left-names names))
-		 (when (and left-names (pl-js2-name-subset-p left-names names))
-;;		   (print "right: ") (print (and right (js2-node-string right)))
+		 (when (and left-names (js2-compute-names-subset-p left-names names))
 		   (setq care-node-names (list right left-names))))))
 	   t)))
-;;      (print "names-inner-:")  (mapc (lambda (x) (print (js2-node-string x))) names)
-;;      (print "length:") (print (and (cadr care-node-names) (length (cadr care-node-names))))
       (setq names (nthcdr (length (cadr care-node-names)) names))
-;;      (print "names-inner:")  (mapc (lambda (x) (print (js2-node-string x))) names)
-;;      (print "care-node:") (print (and (car care-node-names) (js2-node-string (car care-node-names))))
       (list (car care-node-names) names))))
 
-(defun pl-scope-of-node (node)
+(defun js2-compute-scope-of-node (node)
   (cond ((js2-name-node-p node)
 	 (or (js2-name-node-scope node) js2-mode-ast))))
-;;  (progn
-   ;; (print "node-string: ") (print (js2-node-string node))
-;;    (print "name-node-p: ") (print (js2-name-node-p node))
-  ;;  (print "scope: ") (print (js2-node-string (or (js2-name-node-scope node) js2-mode-ast)))
-;;    (or (js2-name-node-scope node) js2-mode-ast)))
-(defun pl-js2-name-subset-p (s l)
+
+(defun js2-compute-names-subset-p (s l)
   (let ((ss s) (ll l))
     (while (and ss ll (string= (js2-name-node-name (car ss)) (js2-name-node-name (car ll))))
       (setq ss (cdr ss) ll (cdr ll)))
