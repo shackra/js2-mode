@@ -14712,7 +14712,7 @@ it marks the next defun after the ones already marked."
               (unless (and (js2-object-prop-node-p parent)
                            (eq node (js2-object-prop-node-left parent)))
                 node)) names)
-    (setq node-init (js2-search-scope node names))
+    (setq node-init (js2-find-definition-rec node names))
 
     ;; todo: display list of results in buffer
     ;; todo: group found references by buffer
@@ -14723,7 +14723,7 @@ it marks the next defun after the ones already marked."
            (mapc (lambda (b)
                    (with-current-buffer b
                      (when (derived-mode-p 'js2-mode)
-                       (setq node-init (js2-search-scope js2-mode-ast names))
+                       (setq node-init (js2-find-definition-rec js2-mode-ast names))
                        (if node-init
                            (throw 'found b)))))
                  (buffer-list)))
@@ -14748,9 +14748,9 @@ it marks the next defun after the ones already marked."
                                 (js2-string-node-value left))))
            return elem))
 
-(defun js2-search-scope (cur-node names)
-  (js2-find-definition-rec cur-node names))
-(defun js2-find-definition-rec (cur-node names) ;; todo change name
+(defun js2-find-definition-rec (cur-node names)
+  "Find definition node before cur-node, recursive find when get object or name node. 
+Return definition node of best match."
   (if (not names)
       (if (not cur-node) nil
 	(let ((parent (js2-node-parent cur-node)))
@@ -14773,16 +14773,18 @@ it marks the next defun after the ones already marked."
 		  names (cadr value-names))))
 	(when (or
 	       (and (js2-name-node-p value)
-		    (not (js2-function-node-p (js2-name-node-parent value)))) ;; not trace function arg
+		    (not (js2-function-node-p (js2-name-node-parent value)))) ;; not trace function arg name
 	       (js2-prop-get-node-p value)
 	       (js2-elem-get-node-p value))
 	  (setq names (js2-compute-names-add-prefix value names))))
       (js2-find-definition-rec value names))))
 
 (defun js2-compute-names-add-prefix (prefix names)
+  "Convert prefix node to name list and append names after it."
   (append (js2-compute-nested-prop-get prefix) names))
 
 (defun js2-search-object-rec (object-node names)
+  "Find names in object-node, consuome one name for each object level. Return a list of value and names"
   (if (not names) object-node
     (let ((value (js2-object-prop-node-right (js2-search-object object-node (pop names)))))
       (when value
@@ -14790,6 +14792,7 @@ it marks the next defun after the ones already marked."
 	  (js2-search-object-rec value names))))))
 
 (defun js2-find-definition (cur-node names)
+  "Find the last definition node or assign node of names. Return a list of node be found and remainder names."
   ;; find last node we care ( left is subset of names )
   (let ((care-node-names (list nil nil))
 	(scope (js2-compute-scope-of-node cur-node)))
@@ -14824,10 +14827,12 @@ it marks the next defun after the ones already marked."
       (list (car care-node-names) names))))
 
 (defun js2-compute-scope-of-node (node)
+  "Compute the definition scope of node. Global scope for scope of name is not found."
   (cond ((js2-name-node-p node)
 	 (or (js2-name-node-scope node) js2-mode-ast))))
 
 (defun js2-compute-names-subset-p (s l)
+  "Return non-nil if names l is starts with names s."
   (let ((ss s) (ll l))
     (while (and ss ll (string= (js2-name-node-name (car ss)) (js2-name-node-name (car ll))))
       (setq ss (cdr ss) ll (cdr ll)))
