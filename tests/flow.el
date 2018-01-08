@@ -1089,16 +1089,10 @@ case b:
 ;;   "import(/* comment */ foo + 2)")
 
 
-;;; Walt
+;;; Throw expr
 
-(js2-deftest-parse walt-buildin-type
-  "var a: i32;")
+(js2-deftest-parse throw-expr-assign
+  "var a = throw new Error();")
 
-(js2-deftest-parse walt-buildin-type-2
-  "var a: i64;")
-
-(js2-deftest-parse walt-buildin-type-3
-  "var a: f32;")
-
-(js2-deftest-parse walt-buildin-type-4
-  "var a: f64;")
+(js2-deftest-parse throw-expr-arrow-function
+  "() => {  throw new Error();\n};")
