@@ -683,6 +683,12 @@ the test."
 (js2-deftest-parse arrow-function-return-type
   "var a = (): b => {};")
 
+(js2-deftest-parse arrow-function-return-type-2
+  "var a = (): b<c> => {};")
+
+(js2-deftest-parse arrow-function-return-type-3
+  "var a = (): b<c<d>> => {};")
+
 (js2-deftest-parse function-expr-predicate-annotation
   "var a = function(): %checks {};")
 
@@ -703,6 +709,9 @@ the test."
 
 (js2-deftest-parse arrow-function-type-params
   "var a = <b>() => {};")
+
+(js2-deftest-parse arrow-function-type-params-2
+  "var a = <b<c>>() => {};")
 
 (js2-deftest-parse async-function-stmt-type-params
   "async function a<b>() {\n}")

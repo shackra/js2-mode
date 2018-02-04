@@ -10926,9 +10926,11 @@ If NODE is non-nil, it is the AST node associated with the symbol."
                  (not in-funcall)
                  (not js2-in-function-body))
         (js2-unget-token)
-        (setq type-params (js2-parse-type-params))
+        (setq js2-in-type t
+              type-params (js2-parse-type-params))
         (setq tt (js2-get-token)
-              pos (js2-current-token-beg)))
+              pos (js2-current-token-beg)
+              js2-in-type nil))
       (when (js2-match-async-arrow-function)
         (setq async-p t))
       ;; Save the tokenizer state in case we find an arrow function
@@ -10945,7 +10947,9 @@ If NODE is non-nil, it is the AST node associated with the symbol."
         (setq js2-in-function t)
         (when (js2-match-token js2-CHECKS) ; match :%checks
           (setq predicate t))
+        (setq js2-in-type t)
         (js2-create-type-node)
+        (setq js2-in-type nil)
         (when (and (not predicate)         ; match :T %checks
                    (js2-match-token js2-CHECKS))
           (setq predicate t)
