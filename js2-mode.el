@@ -9405,6 +9405,7 @@ Last token scanned is the close-curly for the function body."
           js2-loop-and-switch-set)
       (js2-parse-function-params function-type fn-node pos)
       ;; parse function return type, e.g. function foo(): number %checks {}
+      ;; TODO: add supports type params
       (when (js2-match-token js2-COLON)
         (if (js2-match-token js2-CHECKS)      ; match (): %checks no return type
             (setf (js2-function-node-predicate fn-node) t)
@@ -9420,10 +9421,12 @@ Last token scanned is the close-curly for the function body."
             (js2-unget-token))))
       (when (eq function-type 'FUNCTION_ARROW)
         (js2-must-match js2-ARROW "msg.bad.arrow.args"))
+      (setq js2-in-function-body t)
       (if (and (>= js2-language-version 180)
                (/= (js2-peek-token) js2-LC))
           (js2-parse-function-closure-body fn-node)
         (js2-parse-function-body fn-node))
+      (setq js2-in-function-body nil)
       (js2-check-inconsistent-return-warning fn-node name)
 
       (when name
@@ -10920,7 +10923,8 @@ If NODE is non-nil, it is the AST node associated with the symbol."
       ;;   (): T %checks
       ;; ----^ predicate annotation after return type
       (when (and (= tt js2-LT)
-                 (not in-funcall))
+                 (not in-funcall)
+                 (not js2-in-function-body))
         (js2-unget-token)
         (setq type-params (js2-parse-type-params))
         (setq tt (js2-get-token)
@@ -12351,6 +12355,7 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
 
 (js2-deflocal js2-in-type nil "state for scan tokens.")
 (js2-deflocal js2-in-function nil "state for arrow function return type.")
+(js2-deflocal js2-in-function-body nil "state for parse function body type.")
 
 (defface js2-type-annotation
   '((t :foreground "DimGray"))
@@ -14747,7 +14752,7 @@ it marks the next defun after the ones already marked."
            return elem))
 
 (defun js2-find-definition-rec (cur-node names)
-  "Find definition node before cur-node, recursive find when get object or name node. 
+  "Find definition node before cur-node, recursive find when get object or name node.
 Return definition node of best match."
   (if (not names)
       (if (not cur-node) nil
@@ -14763,7 +14768,7 @@ Return definition node of best match."
     (let* ((value-names (js2-find-definition cur-node names))
 	   (value (car value-names))
 	   (names (cadr value-names)))
-	  
+
       (when (and value names)
 	(when (js2-object-node-p value)
 	  (let ((value-names (js2-search-object-rec value names)))

@@ -1074,6 +1074,12 @@ case b:
 (js2-deftest-parse object-method-with-type-params
   "var a = {b<c>() {}};")
 
+(js2-deftest-parse jsx
+  "function foo() {\n  return (<b></b>);\n}")
+
+(js2-deftest-parse jsx-2
+  "() => {  <b></b>;\n};")
+
 ;;; Babylon plugins and Stage-0
 
 (js2-deftest-parse dynamic-import
