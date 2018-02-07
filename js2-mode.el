@@ -9837,6 +9837,7 @@ js2-export-binding-node and consume all the tokens. If it does not match, it
 consumes no tokens."
   (let ((kind (when import-p (js2-parse-module-kind)))
         (extern-name (cond
+                      ((js2-match-token js2-DEFAULT) "default")
                       ((js2-match-token js2-TYPEOF) "typeof")
                       ((js2-match-contextual-kwd "type") "type")
                       ((js2-match-prop-name) (js2-current-token-string))
@@ -9879,6 +9880,10 @@ consumes no tokens."
                     (if import-p
                         (js2-set-face (js2-current-token-beg) (js2-current-token-end)
                                       'font-lock-variable-name-face 'record))
+                    ;; export { A as B }
+                    ;; ---------^ set font face to nil
+                    (js2-set-face beg (+ beg extern-name-len)
+                                  'nil 'record)
                     node)
                 (js2-unget-token)
                 nil))

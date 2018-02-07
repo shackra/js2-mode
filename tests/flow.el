@@ -1089,6 +1089,9 @@ case b:
 (js2-deftest-parse jsx-2
   "() => {  <b></b>;\n};")
 
+(js2-deftest-parse export-default-as-named
+  "export {default as foo} from 'm';")
+
 ;;; Babylon plugins and Stage-0
 
 (js2-deftest-parse dynamic-import
