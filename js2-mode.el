@@ -6054,6 +6054,8 @@ You should use `js2-print-tree' instead of this function."
                       js2-WITH
                       js2-WITHEXPR
                       js2-YIELD
+                      js2-TYPE
+                      js2-OPAQUE
                       js2-INTERFACE))
       (aset tokens tt t))
     tokens))
@@ -9570,6 +9572,8 @@ node are given relative start positions and correct lengths."
         js2-CLASS
         js2-FUNCTION
         js2-EXPORT
+        js2-TYPE
+        js2-OPAQUE
         js2-INTERFACE)
   "List of tokens that don't do automatic semicolon insertion.")
 
@@ -10072,7 +10076,10 @@ invalid export statements."
       (setq declaration (js2-parse-interface)))
      ((js2-match-token js2-NAME)
       (if (string= (js2-current-token-string) "opaque")
-          (setq declaration (js2-parse-opaque-type-alias))
+          (progn
+            (js2-set-face (js2-current-token-beg) (js2-current-token-end)
+                          'font-lock-keyword-face 'record)
+            (setq declaration (js2-parse-opaque-type-alias)))
         (setq declaration
               (if (js2-match-async-function)
                   (js2-parse-async-function-stmt)
@@ -10604,9 +10611,13 @@ expression and return it wrapped in a `js2-expr-stmt-node'."
     (cond
      ((and (string= name-str "type")
            (= (js2-peek-token) js2-NAME))
+      (js2-set-face (js2-current-token-beg) (js2-current-token-end)
+                    'font-lock-keyword-face 'record)
       (js2-parse-type-alias))
      ((and (string= name-str "opaque")
            (= (js2-peek-token) js2-NAME))
+      (js2-set-face (js2-current-token-beg) (js2-current-token-end)
+                    'font-lock-keyword-face 'record)
       (js2-parse-opaque-type-alias))
      ((and (string= name-str "declare")
            (= (js2-peek-token) js2-NAME))
@@ -13024,7 +13035,7 @@ TODO: free semi supports."
   (let ((pos (js2-current-token-beg))
         (_ (js2-must-match-name "msg.unnamed.type.alias.decl"))
         (name (js2-create-name-node t))
-        type-params node)
+        type-params node pn)
     (js2-set-face (js2-node-pos name) (js2-node-end name)
                   'font-lock-function-name-face 'record)
     ;; parse type params after name, e.g. type a<T>
