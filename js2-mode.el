@@ -12378,7 +12378,7 @@ And, if CHECK-ACTIVATION-P is non-nil, use the value of TOKEN."
 (js2-deflocal js2-in-function-body nil "state for parse function body type.")
 
 (defface js2-type-annotation
-  '((t :foreground "DimGray"))
+  '((t :inherit font-lock-type-face))
   "Face used to highlight primitive type."
   :group 'js2-mode)
 
